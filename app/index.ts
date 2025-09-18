@@ -16,7 +16,7 @@ app.get('/', (req: any, res:any) => {
 app.use('/player', player_router); */
 
 async function startServer() {
-    await db_service.init();
+    // await db_service.init();
     await db_service.createTables();
     /* return new Promise<void>((resolve) => {
         app.listen(port, ()  => {
