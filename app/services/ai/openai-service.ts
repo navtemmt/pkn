@@ -1,18 +1,16 @@
-import OpenAI from "openai";
-import { ChatCompletionMessageParam } from "openai/resources/chat/completions.mjs";
+import clipboardy from 'clipboardy';
+import { prompt } from 'enquirer';
 import { AIMessage, AIResponse, AIService, BotAction } from "../../interfaces/ai-client-interfaces.ts";
 import { getPromptFromPlaystyle, parseResponse} from "../../helpers/ai-query-helper.ts";
 
-export class OpenAIService extends AIService {
-    private agent!: OpenAI;
-
+export class ManualChatGPTService extends AIService {
     init(): void {
-        this.agent = new OpenAI({ apiKey: this.getAPIKey() });
+        console.log("🤖 Manual ChatGPT Service initialized");
+        console.log("💡 Make sure ChatGPT is open in your browser");
     }
     
-    //takes an already created query and passes it into chatGPT if it is the first action,
-    //otherwise attaches it to previous queries and feeds the entire conversation into chatGPT
     async query(input: string, prev_messages: AIMessage[]): Promise<AIResponse> {
+        // Build message history (same logic as original)
         if (prev_messages.length > 0) {
             if (input !== prev_messages[prev_messages.length - 1].text_content) {
                 prev_messages.push({text_content: input, metadata: {"role": "user"}});
@@ -31,47 +29,66 @@ export class OpenAIService extends AIService {
                 ];
             }
         }
-    
-        console.log("prev_messages:", prev_messages);
-        const processed_messages = this.processMessages(prev_messages);
-        const completion = await this.agent.chat.completions.create({
-            messages: processed_messages,
-            model: this.getModelName()
+
+        // Format for manual copy-paste
+        const formatted_prompt = this.formatForChatGPT(prev_messages);
+        
+        // Auto-copy to clipboard
+        await clipboardy.write(formatted_prompt);
+        
+        console.log("\n" + "=".repeat(50));
+        console.log("🔥 PROMPT COPIED TO CLIPBOARD!");
+        console.log("📋 Paste this in ChatGPT:");
+        console.log("=".repeat(50));
+        console.log(formatted_prompt);
+        console.log("=".repeat(50));
+        
+        // Wait for user to paste response
+        const response: any = await prompt({
+            type: 'input',
+            name: 'chatgpt_response',
+            message: '🎯 Paste ChatGPT response here and press Enter:'
         });
 
-        const choice = completion.choices[0];
-        const response = choice.message;
-        const text_content = response.content;
-
+        const text_content = response.chatgpt_response;
         let bot_action: BotAction = {
             action_str: "",
             bet_size_in_BBs: 0
-        };;
+        };
 
-        if (response && text_content) {
+        if (text_content) {
             bot_action = parseResponse(text_content);
         }
+
+        // Add AI response to message history
+        prev_messages.push({
+            text_content: text_content,
+            metadata: {"role": "assistant"}
+        });
 
         return {
             bot_action: bot_action,
             prev_messages: prev_messages,
             curr_message: {
-                text_content: text_content!,
+                text_content: text_content,
                 metadata: {
-                    "role": response.role
+                    "role": "assistant"
                 }
             }
-        }
+        };
     }
 
-    processMessages(messages: AIMessage[]): ChatCompletionMessageParam[] {
-        const output: ChatCompletionMessageParam[] = [];
+    private formatForChatGPT(messages: AIMessage[]): string {
+        let formatted = "";
+        
         for (const message of messages) {
-            output.push({
-                role: message.metadata.role,
-                content: message.text_content
-            })
+            if (message.metadata.role === "system") {
+                formatted += `[SYSTEM PROMPT]\n${message.text_content}\n\n`;
+            } else if (message.metadata.role === "user") {
+                formatted += `[USER REQUEST]\n${message.text_content}\n\n`;
+            }
         }
-        return output;
+        
+        return formatted.trim();
     }
 }
