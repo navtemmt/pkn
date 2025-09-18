@@ -24,7 +24,7 @@
     "clipboardy": "^4.0.0",
     "enquirer": "^2.4.1",
     "sharp": "^0.33.2"
-    "tesseract.js": "^5.0.4",
+    "tesseract.js": "^5.0.4"
   },
   "devDependencies": {
     "@types/chai": "^4.3.16",
