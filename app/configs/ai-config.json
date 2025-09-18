@@ -1,5 +1,5 @@
 {
   "provider": "MANUAL_CHATGPT",
   "model_name": "gpt-4o",
-  "automation_level": "MANUAL" // or "SEMI_AUTO" for Puppeteer
+  "automation_level": "MANUAL"
 }
