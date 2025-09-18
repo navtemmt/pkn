@@ -3,7 +3,7 @@ import express from 'express';
 import bot_manager from './bot-manager.ts'
 import player_router from './routes/player-routes.ts';
 import db_service from './services/db-service.ts';
-
+import 'dotenv/config';
 const app = express();
 /* const port = 8080;
 
