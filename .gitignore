@@ -133,5 +133,11 @@ dist
 # sqlite3 db file
 *.db
 
-# env file
-*.env
+# dotenv environment variable files
+.env
+.env.*
+# Allow committed templates
+!.env.sample
+!.env.example
+
+
