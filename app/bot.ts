@@ -230,22 +230,50 @@ export class Bot {
     }
 
     private async enterTableInProgress() {
-        while (true) {
-            const nameResponse: any = await prompt({ type: 'input', name: 'name', message: 'What is your desired player name?' });
-            this.bot_name = nameResponse.name;
-
-            const stackResponse: any = await prompt({ type: 'input', name: 'stack', message: 'What is your desired stack size?' });
-            const stack_size = Number(stackResponse.stack);
-
-            console.log(`Attempting to enter table with name: ${this.bot_name} and stack size: ${stack_size}.`);
-            const code = logResponse(await this.puppeteer_service.sendEnterTableRequest(this.bot_name, stack_size), this.debug_mode);
-
-            if (code === "success") break;
-            console.log("Please try again.");
-        }
-        console.log("Waiting for table host to accept ingress request.");
-        logResponse(await this.puppeteer_service.waitForTableEntry(), this.debug_mode);
+      // Prefer environment variables; fall back to prompts if missing
+      const envName = (process.env.HERO_NAME || '').trim();
+      const envStackRaw = (process.env.HERO_STACK || '').trim();
+      const envStack =
+        envStackRaw !== '' && !Number.isNaN(Number(envStackRaw)) ? Number(envStackRaw) : undefined;
+    
+      // Optional: observation-only mode skips any seat/join attempts
+      if (process.env.ADVISOR_OBSERVE === '1') {
+        console.log("Observation mode enabled; skipping seating/join.");
+        return;
+      }
+    
+      while (true) {
+        // Use env name if provided, otherwise prompt
+        const nameResponse: any =
+          envName
+            ? { name: envName }
+            : await prompt({ type: 'input', name: 'name', message: 'What is your desired player name?' });
+        this.bot_name = (nameResponse.name || '').trim();
+    
+        // Use env stack if provided, otherwise prompt
+        const stackResponse: any =
+          envStack !== undefined
+            ? { stack: String(envStack) }
+            : await prompt({ type: 'input', name: 'stack', message: 'What is your desired stack size?' });
+        const stack_size = Number(stackResponse.stack);
+    
+        console.log(`Attempting to enter table with name: ${this.bot_name} and stack size: ${stack_size}.`);
+        const code = logResponse(
+          await this.puppeteer_service.sendEnterTableRequest(this.bot_name, stack_size),
+          this.debug_mode
+        );
+    
+        if (code === "success") break;
+    
+        console.log("Please try again.");
+        // If env values failed (e.g., name taken), loop will prompt next time unless env still set
+        // To force prompt next loop when env is set, clear envName/envStack here if desired.
+      }
+    
+      console.log("Waiting for table host to accept ingress request.");
+      logResponse(await this.puppeteer_service.waitForTableEntry(), this.debug_mode);
     }
+    
 
     private async updateNumPlayers() { /* ... from original */ }
     private async waitForNextHand() { /* ... from original */ }
