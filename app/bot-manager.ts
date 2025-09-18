@@ -43,7 +43,7 @@ const bot_manager = async function() {
     ai_service_factory.printSupportedModels();
     const ai_service = ai_service_factory.createAIService(ai_config.provider, ai_config.model_name, ai_config.playstyle);
     console.log(`Created AI service: ${ai_config.provider} ${ai_config.model_name} with playstyle: ${ai_config.playstyle}`);
-    ai_service.init();
+    // ai_service.init();
 
     const bot = new Bot(log_service, ai_service, player_service, puppeteer_service, game_id, bot_config.debug_mode, bot_config.query_retries);
     await bot.run();
