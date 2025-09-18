@@ -1,44 +1,38 @@
+// app/helpers/ai-service-factory.ts
+
 import { AIService } from "../interfaces/ai-client-interfaces.ts";
-import { GoogleAIService } from "../services/ai/googleai-service.ts";
-import { OpenAIService } from "../services/ai/openai-service.ts";
+import { ManualChatGPTService } from "../services/ai/manual-chatgpt-service.ts";
+// Note: Imports for GoogleAIService and OpenAIService have been removed.
 
 export class AIServiceFactory {
-    private supportedModels: Map<string, string[]>;
-
-    constructor(){
-        this.supportedModels = new Map<string, string[]>([
-            ["OpenAI", ["gpt-3.5-turbo", "gpt-4-turbo", "gpt-4o"]],
-            ["Google", ["gemini-1.5-flash", "gemini-1.0-pro", "gemini-1.5-pro"]]
-        ]);
-    }
-
+    /**
+     * Creates and returns an AI service instance.
+     * For the manual workflow, this factory is simplified to always return 
+     * the ManualChatGPTService, regardless of the provider specified in the config.
+     *
+     * @param provider - The AI provider from the config (e.g., "MANUAL_CHATGPT"). This is now ignored.
+     * @param model_name - The name of the model to use (e.g., "gpt-4o").
+     * @param playstyle - The desired playstyle for the bot (e.g., "TAG").
+     * @returns An instance of ManualChatGPTService.
+     */
     createAIService(provider: string, model_name: string, playstyle: string = "neutral"): AIService {
-        if (!(this.supportedModels.has(provider) && this.supportedModels.get(provider)!.includes(model_name))) {
-            throw new Error("AI provider or model not supported, please check the list of supported models.")
-        }
-        switch(provider) {
-            case ("OpenAI"):
-                const openai_auth_key = process.env.OPENAI_API_KEY;
-                if (!openai_auth_key) {
-                    throw new Error(`Invalid ${provider} auth key.`);
-                }
-                return new OpenAIService(openai_auth_key, model_name, playstyle);
-            case ("Google"):
-                const googleai_auth_key = process.env.GOOGLEAI_API_KEY;
-                if (!googleai_auth_key) {
-                    throw new Error (`Invalid ${provider} auth key.`);
-                }
-                return new GoogleAIService(googleai_auth_key, model_name, playstyle);
-        }
-        throw new Error("Failed to create AI service.");
+        console.log("🤖 AI Service Factory is creating a service...");
+        
+        // In this modified workflow, we always use the ManualChatGPTService.
+        // This simplifies the setup and removes the need for API keys and other service files.
+        console.log(`   -> Config provider '${provider}' found, but we are defaulting to ManualChatGPTService.`);
+        
+        const manualService = new ManualChatGPTService(model_name, playstyle);
+        console.log("   -> ManualChatGPTService instance created successfully.");
+
+        return manualService;
     }
 
+    /**
+     * This method is kept for compatibility but is no longer relevant in manual mode.
+     */
     printSupportedModels(): void {
-        console.log("Supported models:")
-        for (const provider of Array.from(this.supportedModels.keys())) {
-            let out = provider.concat(": ");
-            out = out.concat(this.supportedModels.get(provider)!.join(", "));
-            console.log(out);
-        }
+        console.log("✅ AI Service is configured for Manual ChatGPT mode.");
+        console.log("   -> No specific models are required as you will be using the ChatGPT web interface.");
     }
 }
