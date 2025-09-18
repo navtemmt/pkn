@@ -32,7 +32,7 @@ const bot_manager = async function() {
     await puppeteer_service.init();
 
     const db_service = new DBService("./app/pokernow-gpt.db");
-    await db_service.init();
+    // await db_service.init();
 
     const player_service = new PlayerService(db_service);
 
