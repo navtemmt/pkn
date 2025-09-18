@@ -23,7 +23,7 @@ export class PuppeteerService {
 
   // Attach to an existing Chrome (BROWSER_WS_ENDPOINT) or launch normally
   async init(): Promise<void> {
-    const ws = process.env.BROWSER_WS_ENDPOINT;
+    const ws = (process.env.BROWSER_WS_ENDPOINT || '').trim();
     if (ws) {
       this.browser = await puppeteer.connect({ browserWSEndpoint: ws });
     } else {
@@ -36,9 +36,6 @@ export class PuppeteerService {
     this.page = pages.find(p => (p.url() || '').includes('pokernow.club')) || await this.browser.newPage();
   }
 
-  async closeBrowser(): Promise<void> {
-    await this.browser.close();
-  }
 
   async navigateToGame<D, E = Error>(game_id: string): Response<D, E> {
     if (!game_id) {
