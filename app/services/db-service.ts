@@ -1,28 +1,32 @@
 import { Database, open } from 'sqlite'
 import sqlite3 from 'sqlite3';
 
+// app/services/db-service.ts
+
 export class DBService {
     private mockData: Map<string, any> = new Map();
 
-    async query(sql: string, params: any[]): Promise<any> {
-        console.log('Mock Database Query:', sql, params);
-        return []; // Return empty results for now
+    constructor() {
+        console.log("✅ Using Mock Database Service. No real database will be used.");
+    }
+
+    /**
+     * A mock query method that simulates database interaction.
+     * It returns empty arrays for SELECT queries and does nothing for others.
+     */
+    async query(sql: string, params: any[]): Promise<any[]> {
+        console.log(`[Mock DB] Executing: ${sql.substring(0, 50)}...`, params);
+
+        // For any SELECT query, return an empty array to prevent downstream errors
+        if (sql.trim().toLowerCase().startsWith('select')) {
+            return [];
+        }
+
+        // For INSERT, UPDATE, DELETE, simulate a successful operation
+        return [];
     }
 }
-    
 
-    async query(sql: string, params: Array<any>): Promise<Array<string>> {
-        var rows : string[] = [];
-        await this.db.each(sql, params, (err: any, row: string) => {
-            if (err) {
-                throw new Error(err.message);
-            }
-            rows.push(row);
-        });
-        return rows;
-    }
-}
-
-const db_service = new DBService("./app/pokernow-gpt.db");
-
+// Export a single instance of the service
+const db_service = new DBService();
 export default db_service;
