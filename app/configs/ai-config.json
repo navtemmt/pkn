@@ -1,5 +1,5 @@
 {
-    "provider": "Google",
-    "model_name": "gemini-1.5-pro",
-    "playstyle": "neutral"
+  "provider": "MANUAL_CHATGPT",
+  "model_name": "gpt-4o",
+  "automation_level": "MANUAL" // or "SEMI_AUTO" for Puppeteer
 }
