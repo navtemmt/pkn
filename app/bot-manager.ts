@@ -18,7 +18,7 @@ dotenv.config();
 
 const bot_manager = async function() {
     // The interactive prompt has been removed. The game ID is now hardcoded.
-    const game_id = "pglA3x5V3hNj0dzgYizJZnXVt";
+    const game_id = "pglXZelQTzXBxBQmVs7GPcGJY";
     console.log(`✅ Using hardcoded game ID: ${game_id}`);
 
     const puppeteer_service = new PuppeteerService(webdriver_config.default_timeout, webdriver_config.headless_flag);
