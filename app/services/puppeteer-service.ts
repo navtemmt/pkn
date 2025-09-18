@@ -94,47 +94,98 @@ export class PuppeteerService {
     }
     
     // send enter table request as non-host player
-    async sendEnterTableRequest<D, E=Error>(name: string, stack_size: number): Response<D, E> {
-        if (name.length < 2 || name.length > 14) {
-            return {
-                code: "error",
-                error: new Error("Player name must be betwen 2 and 14 characters long.") as E
-            }
+    // replace your sendEnterTableRequest with this version
+    async sendEnterTableRequest<D, E = Error>(name: string, stack_size: number): Response<D, E> {
+      if (name.length < 2 || name.length > 14) {
+        return {
+          code: "error",
+          error: new Error("Player name must be betwen 2 and 14 characters long.") as E
         }
-        try {
-            await this.page.waitForSelector(".table-player-seat-button", {timeout: this.default_timeout * 4});
-            await this.page.$eval(".table-player-seat-button", (button: any) => button.click());
-        } catch (err) {
-            return {
-                code: "error",
-                error: new Error("Could not find open seat.") as E
-            }
-        }
-        await this.page.focus(".selected > div > form > div:nth-child(1) > input");
+      }
+      try {
+        // 1) Click an open seat
+        await this.page.waitForSelector(".table-player-seat-button", { timeout: this.default_timeout * 4, visible: true });
+        await this.page.$eval(".table-player-seat-button", (button: any) => button.click());
+    
+        // 2) Wait for the join form/modal to appear (avoid deep nth-child chains)
+        const form =
+          (await this.page.waitForSelector('.selected form', { visible: true, timeout: this.default_timeout * 4 })) ||
+          (await this.page.waitForSelector('form', { visible: true, timeout: this.default_timeout * 4 }));
+    
+        // 3) Locate the name input robustly: prefer ARIA/text or stable attrs, then fallback
+        // ARIA/text selectors (Puppetaria)
+        let nameInput =
+          (await this.page.$('aria/Name[role="textbox"]')) ||
+          (await this.page.$('::-p-aria(Name)[role="textbox"]')) ||
+          (await form?.$('input[placeholder*="name" i]')) ||
+          (await form?.$('input[name="name"]')) ||
+          (await form?.$('input[type="text"]')) ||
+          (await this.page.waitForSelector('input[placeholder], input[name], input[type="text"]', { visible: true, timeout: this.default_timeout }));
+    
+        if (!nameInput) throw new Error("Name input not found");
+    
+        await nameInput.click();
         await this.page.keyboard.type(name);
-        await this.page.focus(".selected > div > form > div:nth-child(2) > input");
-        await this.page.keyboard.type(stack_size.toString())
-        await this.page.$eval(".selected > div > form > button", (button: any) => button.click());
-        try {
-            await this.page.waitForSelector(".alert-1-buttons > button", {timeout: this.default_timeout});
-            await this.page.$eval(".alert-1-buttons > button", (button: any) => button.click());
-        } catch (err) {
-            var message = "Table ingress unsuccessful."
-            if (await this.page.$(".selected > div > form > div:nth-child(1) > .error-message")) {
-                message = "Player name must be unique to game.";
-            }
-            await this.page.$eval(".selected > button", (button: any) => button.click());
-            return {
-                code: "error",
-                error: new Error(message) as E
-            }
+    
+        // 4) Locate the stack/buy-in input robustly
+        let stackInput =
+          (await this.page.$('aria/Stack[role="spinbutton"]')) ||
+          (await form?.$('input[placeholder*="stack" i]')) ||
+          (await form?.$('input[name="stack"]')) ||
+          (await form?.$('input[type="number"]')) ||
+          (await this.page.waitForSelector('input[type="number"], input', { visible: true, timeout: this.default_timeout }));
+    
+        if (!stackInput) throw new Error("Stack input not found");
+    
+        await stackInput.click();
+        await this.page.keyboard.type(String(stack_size));
+    
+        // 5) Submit the join form
+        let joinBtn =
+          (await this.page.$('button[type="submit"]')) ||
+          (await this.page.$('aria/Join[role="button"]')) ||
+          (await this.page.$('::-p-aria(Join)[role="button"]')) ||
+          (await form?.$('button'));
+    
+        if (!joinBtn) throw new Error("Join/submit button not found");
+        await joinBtn.click();
+    
+      } catch (err) {
+        return {
+          code: "error",
+          error: new Error((err as Error).message || "Could not enter a seat/join form") as E
+        }
+      }
+    
+      // 6) Handle potential confirmation dialog or validation
+      try {
+        // Success path: a confirmation button appears
+        await this.page.waitForSelector(".alert-1-buttons > button", { timeout: this.default_timeout });
+        await this.page.$eval(".alert-1-buttons > button", (button: any) => button.click());
+      } catch {
+        // Error path: show helpful reason and close the seat modal cleanly
+        let message = "Table ingress unsuccessful.";
+        if (await this.page.$('.selected form .error-message')) {
+          message = "Player name must be unique to game.";
+        }
+        // Close/cancel out of the seat modal if present
+        const cancelBtn = await this.page.$(".selected > button, button:has-text('Cancel')");
+        if (cancelBtn) {
+          await cancelBtn.click();
         }
         return {
-            code: "success",
-            data: null as D,
-            msg: "Table ingress request successfully sent."
+          code: "error",
+          error: new Error(message) as E
         }
+      }
+    
+      return {
+        code: "success",
+        data: null as D,
+        msg: "Table ingress request successfully sent."
+      }
     }
+
     
     async waitForTableEntry<D, E=Error>(): Response<D, E> {
         try {
