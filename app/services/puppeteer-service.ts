@@ -62,22 +62,17 @@ export class PuppeteerService {
 
 
 
-  async navigateToGame<D, E = Error>(game_id: string): Response<D, E> {
-    if (!game_id) {
-      return {
-        code: "error",
-        error: new Error("Game id cannot be empty.") as E
-      }
-    }
-    // More robust navigation on dynamic pages
-    await this.page.goto(`https://www.pokernow.club/games/${game_id}`, { waitUntil: 'networkidle2' });
-    await this.page.setViewport({ width: 1280, height: 800 });
-    return {
-      code: "success",
-      data: null as D,
-      msg: `Successfully opened PokerNow game with id ${game_id}.`
+  async navigateToGame<D, E=Error>(game_id: string): Response<D,E> {
+    if (!game_id) return { code: 'error', error: new Error('Game id cannot be empty.') as E };
+    try {
+      await this.page.goto(`https://www.pokernow.club/games/${game_id}`, { waitUntil: 'networkidle2' });
+      await this.page.setViewport({ width: 1280, height: 800 });
+      return { code: 'success', data: null as D, msg: `Opened PokerNow game ${game_id}` };
+    } catch (e) {
+      return { code: 'error', error: new Error(`Failed to open game: ${(e as Error).message}`) as E };
     }
   }
+
 
   async waitForGameInfo<D, E = Error>(): Response<D, E> {
     try {
