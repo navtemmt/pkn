@@ -18,9 +18,8 @@ export class PuppeteerService {
   constructor(default_timeout: number, headless_flag: boolean) {
     this.default_timeout = default_timeout;
     this.headless_flag = headless_flag;
-  } // <-- ensure this brace exists
+  } // ensure this brace exists
 
-  // EITHER: method syntax
   convertGameInfo(raw: string): Response<any, Error> {
     try {
       if (!raw || typeof raw !== 'string') throw new Error('Empty game info text');
@@ -39,9 +38,6 @@ export class PuppeteerService {
       return { code: 'error', error: new Error('Failed to parse game info.') as Error };
     }
   }
-
-  // OR: class-field arrow
-  // convertGameInfo = (raw: string): Response<any, Error> => { /* same body */ };
 }
 
 
