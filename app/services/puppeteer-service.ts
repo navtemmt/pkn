@@ -19,7 +19,41 @@ export class PuppeteerService {
   constructor(default_timeout: number, headless_flag: boolean) {
     this.default_timeout = default_timeout;
     this.headless_flag = headless_flag;
+  } // <-- close constructor here
+
+  // Now define the method on the class body
+  convertGameInfo<D, E = Error>(raw: string): Response<D, E> {
+    try {
+      if (!raw || typeof raw !== 'string') {
+        throw new Error('Empty game info text');
+      }
+      const text = raw.replace(/\s+/g, ' ').trim();
+      const rx = /([A-Za-z]{1,3}\s*~\s*)?([£$€]?\s*\d+(?:\.\d+)?)[ ]*\/[ ]*([£$€]?\s*\d+(?:\.\d+)?)(?:[ ]*ante[ ]*([£$€]?\s*\d+(?:\.\d+)?))?/i;
+      const m = text.match(rx);
+      if (!m) {
+        throw new Error('Unrecognized blinds format');
+      }
+      function num(s: string): number {
+        return parseFloat(s.replace(/[^\d.]/g, ''));
+      }
+      const small_blind = num(m[2]);
+      const big_blind = num(m[3]);
+      const ante = m[4] ? num(m[4]) : 0;
+      function curFrom(s: string): string {
+        const c = s.match(/[£$€]/);
+        return c ? c[0] : '';
+      }
+      const c1 = curFrom(m[2]);
+      const c2 = curFrom(m[3]);
+      const currency = c1 || c2;
+      const out = { small_blind, big_blind, ante, currency };
+      return { code: 'success', data: out as D, msg: 'Parsed game info.' };
+    } catch (err) {
+      return { code: 'error', error: new Error('Failed to parse game info.') as E };
+    }
   }
+}
+
 
   // Attach to an existing Chrome (BROWSER_WS_ENDPOINT) or launch normally
   async init(): Promise<void> {
