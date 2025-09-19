@@ -24,7 +24,6 @@ export class PuppeteerService {
   async init(): Promise<void> {
     const ws = (process.env.BROWSER_WS_ENDPOINT || '').trim();
     const httpBase = (process.env.BROWSER_URL || '').trim(); // e.g., http://127.0.0.1:9222
-
     try {
       if (ws && (ws.startsWith('ws://') || ws.startsWith('wss://'))) {
         this.browser = await puppeteer.connect({ browserWSEndpoint: ws });
@@ -49,7 +48,7 @@ export class PuppeteerService {
         this.browser = await puppeteer.launch({ defaultViewport: null, headless: this.headless_flag });
       }
     }
-
+  
     // Select existing PokerNow tab or create one
     const pages = await this.browser.pages();
     const pokerPage = pages.find(p => {
@@ -57,6 +56,21 @@ export class PuppeteerService {
       return u.indexOf('pokernow.club') !== -1;
     });
     this.page = pokerPage ? pokerPage : (await this.browser.newPage());
+  
+    // === ADD THIS BLOCK TO INTERCEPT REQUESTS ===
+    await this.page.setRequestInterception(true);
+    this.page.on('request', (request) => {
+      if (request.url().includes('google-analytics.com')) {
+        // Abort any request going to Google Analytics
+        request.abort();
+      } else {
+        // Allow all other requests to continue
+        request.continue();
+      }
+    });
+    // === END OF ADDED BLOCK ===
+  }
+
 
     // Diagnostics
     this.page.on('pageerror', err => console.error('pageerror:', err));
