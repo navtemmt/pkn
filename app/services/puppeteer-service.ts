@@ -355,14 +355,25 @@ export class PuppeteerService {
 
   async getNumPlayers<D, E = Error>(): Response<D, E> {
     try {
-      await this.page.waitForSelector('.table-player', { timeout: this.default_timeout });
-      const table_players_count = (await this.page.$$eval('.table-player', (divs: any) => divs.length)) as number;
-      const table_player_status_count = (await this.page.$$eval('.table-player-status-icon', (divs: any) => divs.length)) as number;
-      const num_players = table_players_count - table_player_status_count;
+      const ctx: any = this.pickPokerFrame(); // ensure we query the correct frame
+      await ctx.waitForSelector('.table-player', { timeout: this.default_timeout });
+  
+      // Optional diagnostics (runs after ctx is defined)
+      const totals = await ctx.evaluate(() => ({
+        seats: document.querySelectorAll('.table-player').length,
+        seatButtons: document.querySelectorAll('.table-player-seat-button').length
+      }));
+      console.log('Seats:', totals.seats, 'Seat buttons:', totals.seatButtons, 'Seated =', totals.seats - totals.seatButtons);
+  
+      // Count occupied seats: a seat without a seat button is taken
+      const seated = await ctx.$$eval('.table-player', (seats: Element[]) =>
+        seats.filter(seat => !seat.querySelector('.table-player-seat-button')).length
+      );
+  
       return {
         code: 'success',
-        data: num_players as D,
-        msg: `Successfully got number of players in table: ${num_players}`
+        data: seated as D,
+        msg: `Successfully got number of players in table: ${seated}`
       };
     } catch (_err) {
       return {
@@ -371,6 +382,8 @@ export class PuppeteerService {
       };
     }
   }
+
+
 
   // Frame-aware, robust turn detection
   async waitForBotTurnOrWinner<D, E = Error>(num_players: number, max_turn_length: number): Response<D, E> {
