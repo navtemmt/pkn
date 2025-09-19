@@ -18,7 +18,9 @@ export class PuppeteerService {
   constructor(default_timeout: number, headless_flag: boolean) {
     this.default_timeout = default_timeout;
     this.headless_flag = headless_flag;
-  } // <-- must exist
+  } // constructor closes here [leave this]
+
+  // Keep EVERY method below inside the class, until the final closing brace at file end
 
   convertGameInfo(raw: string): Response<any, Error> {
     try {
@@ -38,7 +40,6 @@ export class PuppeteerService {
       return { code: 'error', error: new Error('Failed to parse game info.') as Error };
     }
   }
-}
 
 
 
