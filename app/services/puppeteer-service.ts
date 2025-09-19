@@ -100,56 +100,67 @@ export class PuppeteerService {
     }
   }
   
+  // helper: choose the frame that contains PokerNow content
+  private pickPokerFrame(): puppeteer.Page | puppeteer.Frame {
+    const frames = this.page.frames();
+    const f = frames.find(fr => (fr.url() || '').includes('pokernow.club'));
+    return f || this.page;
+  }
+  
+  // replace waitForGameInfo
   async waitForGameInfo<D, E = Error>(): Response<D, E> {
+    const ctx: any = this.pickPokerFrame();
     try {
       const candidates = [
         '.game-infos .blind-value-ctn .blind-value',
         '.game-infos .blind-value',
-        '[class*="game"][class*="info"]',
+        '[class*="game"][class*="info"]'
       ];
       let found = false;
       for (const sel of candidates) {
         try {
-          await this.page.waitForSelector(sel, { timeout: this.default_timeout * 10, visible: true });
+          await ctx.waitForSelector(sel, { timeout: this.default_timeout * 10, visible: true });
           found = true;
           break;
         } catch {}
       }
       if (!found) {
-        await this.page.waitForFunction(() => {
-          const rx = /([0-9]+(?:\.[0-9]+)?)[^\S\r\n]*[/][^\S\r\n]*([0-9]+(?:\.[0-9]+)?)/;
+        await ctx.waitForFunction(() => {
+          const rx = /(\d+(?:\.\d+)?)\s*\/\s*(\d+(?:\.\d+)?)/;
           const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
           let node: Node | null;
           while ((node = walker.nextNode())) {
-            const t = (node.textContent || '').trim();
+            const t = (node.textContent || '').replace(/\s+/g, ' ').trim();
             if (rx.test(t)) return true;
           }
           return false;
         }, { timeout: this.default_timeout * 15 });
       }
       return { code: 'success', data: null as D, msg: 'Game info is present.' };
-    } catch (err) {
+    } catch {
       return { code: 'error', error: new Error('Failed to wait for game information.') as E };
     }
   }
   
+  // replace getGameInfo
   async getGameInfo<D, E = Error>(): Response<D, E> {
+    const ctx: any = this.pickPokerFrame();
     try {
       const selectors = [
         '.game-infos .blind-value-ctn .blind-value',
         '.game-infos .blind-value',
-        '.game-infos',
+        '.game-infos'
       ];
       let text = '';
       for (const sel of selectors) {
-        const handle = await this.page.$(sel);
+        const handle = await ctx.$(sel);
         if (handle) {
-          text = (await this.page.$eval(sel, el => (el.textContent || '').trim())).trim();
+          text = (await ctx.$eval(sel, (el: Element) => (el.textContent || '').trim())).trim();
           if (text) break;
         }
       }
       if (!text) {
-        text = await this.page.evaluate(() => {
+        text = await ctx.evaluate(() => {
           const rx = /([A-Z]{1,3}\s*~\s*)?([£$€]?\s*\d+(?:\.\d+)?)[^\S\r\n]*\/[^\S\r\n]*([£$€]?\s*\d+(?:\.\d+)?)/i;
           const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
           let node: Node | null;
@@ -162,10 +173,11 @@ export class PuppeteerService {
       }
       if (!text) throw new Error('No blinds text found');
       return { code: 'success', data: text as D, msg: 'Successfully grabbed the game info.' };
-    } catch (err) {
+    } catch {
       return { code: 'error', error: new Error('Could not get game info.') as E };
     }
   }
+
 
 
   // Advisor-only flow: skip joining if already seated or in observe-only mode
