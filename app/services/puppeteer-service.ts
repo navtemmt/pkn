@@ -1,6 +1,8 @@
 import puppeteer from 'puppeteer';
 import { computeTimeout, sleep } from '../helpers/bot-helper.ts';
 import type { Response } from '../utils/error-handling-utils.ts';
+import fs from 'fs/promises';
+const cookiesPath = './cookies.json';
 
 interface GameInfo {
   game_type: string;
@@ -14,6 +16,34 @@ export class PuppeteerService {
   private browser!: puppeteer.Browser;
   private page!: puppeteer.Page;
   private observe_only: boolean = process.env.ADVISOR_OBSERVE === '1';
+  private async manageLoginAndCookies(): Promise<void> {
+    try {
+      // Try to load cookies from the previous session
+      const cookiesString = await fs.readFile(cookiesPath, 'utf8');
+      const cookies = JSON.parse(cookiesString);
+      await this.page.setCookie(...cookies);
+      console.log('✅ Session cookies loaded successfully.');
+      
+      // Navigate to the site to confirm the login
+      await this.page.goto('https://www.pokernow.club/', { waitUntil: 'networkidle2' });
+  
+    } catch (error) {
+      // If loading fails, it means we need to log in manually
+      console.log('⚠️ No saved session found. Please log in manually in the browser.');
+      
+      // Go to the login page
+      await this.page.goto('https://www.pokernow.club/', { waitUntil: 'networkidle2' });
+      
+      // Wait for the user to manually log in. We can detect this by waiting for the URL to change
+      // or for a specific element that only appears after login to show up.
+      await this.page.waitForNavigation({ timeout: 180000 }); // Wait up to 3 minutes for manual login
+      
+      // After successful login, save the new cookies
+      const cookies = await this.page.cookies();
+      await fs.writeFile(cookiesPath, JSON.stringify(cookies, null, 2));
+      console.log('✅ New session cookies saved.');
+    }
+  }
 
   constructor(default_timeout: number, headless_flag: boolean) {
     this.default_timeout = default_timeout;
@@ -68,9 +98,9 @@ export class PuppeteerService {
         request.continue();
       }
     });
-    // === END OF ADDED BLOCK ===
+    await this.manageLoginAndCookies();
   }
-
+  
 
     // Diagnostics
     this.page.on('pageerror', err => console.error('pageerror:', err));
