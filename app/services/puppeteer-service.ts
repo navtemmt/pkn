@@ -5,6 +5,7 @@ import fs from 'fs/promises';
 
 const cookiesPath = './cookies.json';
 
+// You can keep your interface here or move it to a separate file
 interface GameInfo {
   game_type: string;
   big_blind: number;
@@ -20,25 +21,15 @@ export class PuppeteerService {
 
   private async manageLoginAndCookies(): Promise<void> {
     try {
-      // Try to load cookies from the previous session
       const cookiesString = await fs.readFile(cookiesPath, 'utf8');
       const cookies = JSON.parse(cookiesString);
       await this.page.setCookie(...cookies);
       console.log('✅ Session cookies loaded successfully.');
-      
-      // Navigate to the site to confirm the login
       await this.page.goto('https://www.pokernow.club/', { waitUntil: 'networkidle2' });
     } catch (error) {
-      // If loading fails, it means we need to log in manually
       console.log('⚠️ No saved session found. Please log in manually in the browser.');
-      
-      // Go to the login page
       await this.page.goto('https://www.pokernow.club/', { waitUntil: 'networkidle2' });
-      
-      // Wait for the user to manually log in.
-      await this.page.waitForNavigation({ timeout: 180000 }); // Wait up to 3 minutes for manual login
-      
-      // After successful login, save the new cookies
+      await this.page.waitForNavigation({ timeout: 180000 });
       const cookies = await this.page.cookies();
       await fs.writeFile(cookiesPath, JSON.stringify(cookies, null, 2));
       console.log('✅ New session cookies saved.');
@@ -50,7 +41,6 @@ export class PuppeteerService {
     this.headless_flag = headless_flag;
   }
 
-  // Attach to an existing Chrome or launch normally
   async init(): Promise<void> {
     const ws = (process.env.BROWSER_WS_ENDPOINT || '').trim();
     const httpBase = (process.env.BROWSER_URL || '').trim();
@@ -79,26 +69,22 @@ export class PuppeteerService {
       }
     }
 
-    // Select existing PokerNow tab or create one
     const pages = await this.browser.pages();
-    const pokerPage = pages.find(p => {
-      const u = p.url() || '';
-      return u.indexOf('pokernow.club') !== -1;
-    });
+    const pokerPage = pages.find(p => (p.url() || '').includes('pokernow.club'));
     this.page = pokerPage ? pokerPage : (await this.browser.newPage());
 
-    // === MOVE DIAGNOSTIC LISTENERS HERE ===
+    // === ALL EVENT LISTENERS AND SETUP GO INSIDE init() ===
+
+    // 1. Set up diagnostic listeners
     this.page.on('pageerror', err => console.error('pageerror:', err));
     this.page.on('error', err => console.error('page crash/error:', err));
-    this.page.on('console', msg => {
-      console.log('[console:' + msg.type() + '] ' + msg.text());
-    });
+    this.page.on('console', msg => console.log(`[console:${msg.type()}] ${msg.text()}`));
     this.page.on('requestfailed', req => {
       const f = req.failure();
       console.warn('requestfailed:', req.url(), f ? f.errorText : undefined);
     });
 
-    // === INTERCEPT REQUESTS ===
+    // 2. Set up request interception
     await this.page.setRequestInterception(true);
     this.page.on('request', (request) => {
       if (request.url().includes('google-analytics.com')) {
@@ -108,24 +94,8 @@ export class PuppeteerService {
       }
     });
 
+    // 3. Handle login and cookies
     await this.manageLoginAndCookies();
-  }
-  
-  // ... (the rest of your PuppeteerService class remains the same)
-
-
-  
-
-    // Diagnostics
-    this.page.on('pageerror', err => console.error('pageerror:', err));
-    this.page.on('error', err => console.error('page crash/error:', err));
-    this.page.on('console', msg => {
-      console.log('[console:' + msg.type() + '] ' + msg.text());
-    });
-    this.page.on('requestfailed', req => {
-      const f = req.failure();
-      console.warn('requestfailed:', req.url(), f ? f.errorText : undefined);
-    });
   }
 
   async closeBrowser(): Promise<void> {
