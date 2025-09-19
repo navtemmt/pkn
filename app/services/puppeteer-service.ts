@@ -24,16 +24,38 @@ export class PuppeteerService {
   // Attach to an existing Chrome (BROWSER_WS_ENDPOINT) or launch normally
   async init(): Promise<void> {
     const ws = (process.env.BROWSER_WS_ENDPOINT || '').trim();
+    const httpBase = (process.env.BROWSER_URL || '').trim(); // e.g., http://127.0.0.1:9222
+  
+    // 1) Try to connect using env, preferring ws endpoint, otherwise browserURL
     try {
       if (ws && (ws.startsWith('ws://') || ws.startsWith('wss://'))) {
         this.browser = await puppeteer.connect({ browserWSEndpoint: ws });
+      } else if (httpBase && (httpBase.startsWith('http://') || httpBase.startsWith('https://'))) {
+        this.browser = await puppeteer.connect({ browserURL: httpBase });
       } else {
-        this.browser = await puppeteer.launch({ defaultViewport: null, headless: this.headless_flag });
+        throw new Error('No connect URL provided');
       }
     } catch (e) {
-      throw new Error('Browser init failed: ' + (e as Error).message);
+      // 2) If connect failed and we have an HTTP base, refresh ws from /json/version and retry once
+      if (httpBase) {
+        try {
+          const base = httpBase.replace(/\/$/, '');
+          const res = await fetch(base + '/json/version');
+          const data = await res.json();
+          const refreshed = data && data.webSocketDebuggerUrl;
+          if (!refreshed) throw new Error('No webSocketDebuggerUrl in /json/version');
+          this.browser = await puppeteer.connect({ browserWSEndpoint: refreshed });
+        } catch (e2) {
+          // 3) Final fallback: launch a fresh browser
+          this.browser = await puppeteer.launch({ defaultViewport: null, headless: this.headless_flag });
+        }
+      } else {
+        // No httpBase to refresh from: launch a fresh browser
+        this.browser = await puppeteer.launch({ defaultViewport: null, headless: this.headless_flag });
+      }
     }
   
+    // Select existing PokerNow tab or create one
     const pages = await this.browser.pages();
     const pokerPage = pages.find(p => {
       const u = p.url() || '';
@@ -41,7 +63,7 @@ export class PuppeteerService {
     });
     this.page = pokerPage ? pokerPage : (await this.browser.newPage());
   
-    // Diagnostics (no optional chaining)
+    // Diagnostics
     this.page.on('pageerror', err => console.error('pageerror:', err));
     this.page.on('error', err => console.error('page crash/error:', err));
     this.page.on('console', msg => {
@@ -52,6 +74,7 @@ export class PuppeteerService {
       console.warn('requestfailed:', req.url(), f ? f.errorText : undefined);
     });
   }
+
 
   async closeBrowser(): Promise<void> {
     const ws = (process.env.BROWSER_WS_ENDPOINT || '').trim();
