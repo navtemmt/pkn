@@ -18,9 +18,8 @@ export class PuppeteerService {
   constructor(default_timeout: number, headless_flag: boolean) {
     this.default_timeout = default_timeout;
     this.headless_flag = headless_flag;
-  } // <-- make sure this brace exists
+  } // <-- ensure this closing brace exists
 
-  // Non-generic method on the class body
   convertGameInfo(raw: string): Response<any, Error> {
     try {
       if (!raw || typeof raw !== 'string') throw new Error('Empty game info text');
@@ -40,6 +39,7 @@ export class PuppeteerService {
     }
   }
 }
+
 
 
 
