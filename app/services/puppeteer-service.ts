@@ -18,7 +18,7 @@ export class PuppeteerService {
   constructor(default_timeout: number, headless_flag: boolean) {
     this.default_timeout = default_timeout;
     this.headless_flag = headless_flag;
-  } // <-- ensure this closing brace exists
+  } // make sure this is closed
 
   convertGameInfo(raw: string): Response<any, Error> {
     try {
