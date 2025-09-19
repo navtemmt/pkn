@@ -24,28 +24,43 @@ export class PuppeteerService {
   // Attach to an existing Chrome (BROWSER_WS_ENDPOINT) or launch normally
   async init(): Promise<void> {
     const ws = (process.env.BROWSER_WS_ENDPOINT || '').trim();
-    if (ws) {
-      this.browser = await puppeteer.connect({ browserWSEndpoint: ws });
-    } else {
-      this.browser = await puppeteer.launch({
-        defaultViewport: null,
-        headless: this.headless_flag
-      });
+    try {
+      this.browser = ws
+        ? await puppeteer.connect({ browserWSEndpoint: ws })
+        : await puppeteer.launch({ defaultViewport: null, headless: this.headless_flag });
+    } catch (e) {
+      throw new Error(`Browser init failed: ${(e as Error).message || e}`);
     }
+
     const pages = await this.browser.pages();
-    this.page = pages.find(p => (p.url() || '').includes('pokernow.club')) || await this.browser.newPage();
+    this.page =
+      pages.find(p => (p.url() || '').includes('pokernow.club')) ||
+      (await this.browser.newPage());
+
+    // Diagnostics: surface page errors and network failures to logs
+    this.page.on('pageerror', err => console.error('pageerror:', err)); // JS errors inside the page [web:623][web:654]
+    this.page.on('error', err => console.error('page crash/error:', err)); // page crash events [web:623][web:654]
+    this.page.on('console', msg => {
+      // Helpful during debugging; demote/no-op in production as needed
+      console.log(`[console:${msg.type()}] ${msg.text()}`);
+    }); // capture page console output [web:623][web:654]
+    this.page.on('requestfailed', req => {
+      console.warn('requestfailed:', req.url(), req.failure()?.errorText);
+    }); // network request failures [web:623][web:685]
   }
 
   async closeBrowser(): Promise<void> {
     const ws = (process.env.BROWSER_WS_ENDPOINT || '').trim();
     if (ws) {
-      // Attached to an external Chrome: detach only
+      // Detach from the external browser; leave the playing Chrome intact
       this.browser.disconnect();
     } else {
-      // Launched by this process: shut it down
+      // Close only if this process launched the browser
       await this.browser.close();
     }
   }
+
+
 
   async navigateToGame<D, E = Error>(game_id: string): Response<D, E> {
     if (!game_id) {
