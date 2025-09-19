@@ -5,8 +5,10 @@
   "type": "module",
   "scripts": {
     "start": "tsx app/index.ts",
+    "start:dev": "tsx app/index.ts --no-headless",
     "test": "mocha -r dotenv/config --timeout 5000"
   },
+
   "keywords": [],
   "author": "",
   "license": "ISC",
