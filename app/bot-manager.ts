@@ -16,29 +16,30 @@ const webdriver_config: WebDriverConfig = webdriver_config_json;
 
 dotenv.config();
 
-const bot_manager = async function() {
+// Change the function signature to accept the headless_flag
+const bot_manager = async function(headless_flag: boolean) {
   // Load from environment instead of hardcoding
   const game_id = (process.env.GAME_ID || '').trim();
   if (!game_id) {
     throw new Error('Missing GAME_ID in environment (.env). Set GAME_ID=... in your .env file.');
   }
-    console.log(`✅ Using game ID: ${game_id}`);
+    console.log(`Using game ID: ${game_id}`);
 
-    const puppeteer_service = new PuppeteerService(webdriver_config.default_timeout, webdriver_config.headless_flag);
+    // Use the passed-in headless_flag instead of the one from the config file
+    const puppeteer_service = new PuppeteerService(webdriver_config.default_timeout, headless_flag);
     await puppeteer_service.init();
-
+    
     // Note: The following DB services are using your mock implementation.
     const db_service = new DBService("./app/pokernow-gpt.db");
     const player_service = new PlayerService(db_service);
-
     const log_service = new LogService(game_id);
     await log_service.init();
-
+    
     const ai_service_factory = new AIServiceFactory();
     ai_service_factory.printSupportedModels();
     const ai_service = ai_service_factory.createAIService(ai_config.provider, ai_config.model_name, ai_config.playstyle);
     console.log(`Created AI service: ${ai_config.provider} ${ai_config.model_name} with playstyle: ${ai_config.playstyle}`);
-
+    
     const bot = new Bot(log_service, ai_service, player_service, puppeteer_service, game_id, bot_config.debug_mode, bot_config.query_retries);
     await bot.run();
 }
