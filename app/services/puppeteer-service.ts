@@ -214,144 +214,174 @@ export class PuppeteerService {
   }
 
   // Advisor-only flow: skip joining if already seated or in observe-only mode
+  // helper: always operate in the PokerNow frame
+  private getPokerFrame(): puppeteer.Frame | puppeteer.Page {
+    const f = this.pickPokerFrame?.() ?? this.page.frames().find(fr => fr.url().includes('pokernow'));
+    return (f as puppeteer.Frame) || this.page;
+  }
+  
+  // helper: robust clickability check inside the frame
+  private async isClickable(ctx: puppeteer.Frame | puppeteer.Page, el: puppeteer.ElementHandle<Element>): Promise<boolean> {
+    const [disabled, ariaDisabled, hasDisabledClass, visible] = await Promise.all([
+      ctx.evaluate(e => (e as HTMLButtonElement).disabled === true, el),
+      ctx.evaluate(e => e.getAttribute('aria-disabled') === 'true', el),
+      ctx.evaluate(e => (e as HTMLElement).classList?.contains('disabled') === true, el),
+      (el as any).isIntersectingViewport?.() ?? ctx.evaluate(e => {
+        const r = (e as HTMLElement).getBoundingClientRect();
+        return !!(r.width && r.height);
+      }, el)
+    ]);
+    return !disabled && !ariaDisabled && !hasDisabledClass && !!visible;
+  }
+  
   async sendEnterTableRequest<D, E = Error>(name: string, stack_size: number): Response<D, E> {
-    if (await this.page.$('.you-player')) {
-      return { code: 'success', data: null as D, msg: 'Already seated; skipping join.' };
-    }
-    if (this.observe_only) {
-      return { code: 'success', data: null as D, msg: 'Observation mode enabled; skipping join.' };
-    }
-    if (name.length < 2 || name.length > 14) {
-      return { code: 'error', error: new Error('Player name must be betwen 2 and 14 characters long.') as E };
-    }
+    const ctx = this.getPokerFrame();
     try {
-      await this.page.waitForSelector('.table-player-seat-button', { timeout: this.default_timeout * 4, visible: true });
-      const seatButtons = await this.page.$$('.table-player-seat-button');
+      // Already seated or observe-only short-circuits
+      if (await (ctx as any).$('.you-player')) {
+        return { code: 'success', data: null as D, msg: 'Already seated; skipping join.' };
+      }
+      if (this.observe_only) {
+        return { code: 'success', data: null as D, msg: 'Observation mode enabled; skipping join.' };
+      }
+      if (name.length < 2 || name.length > 14) {
+        return { code: 'error', error: new Error('Player name must be betwen 2 and 14 characters long.') as E };
+      }
+  
+      // Wait for any seat button in the frame, then pick a truly actionable one
+      await (ctx as any).waitForSelector('.table-player-seat-button', { timeout: this.default_timeout * 4, visible: true });
+      const seatButtons = await (ctx as any).$$('.table-player-seat-button');
+  
       let clicked = false;
       for (const btn of seatButtons) {
-        const box = await btn.boundingBox();
-        const disabled = await this.page.evaluate(el => (el as HTMLButtonElement).disabled ?? false, btn);
-        if (box && !disabled) {
+        if (await this.isClickable(ctx, btn)) {
           await btn.click();
           clicked = true;
           break;
         }
       }
       if (!clicked) throw new Error('No clickable seat found');
-      await this.page.waitForTimeout(500);
-
+  
+      // Allow modal to render
+      await (ctx as any).waitForTimeout?.(500);
+  
+      // Find the join form in the same frame
       let form =
-        (await this.page.$('.selected form')) ||
-        (await this.page.$('form:has(button[type="submit"])')) ||
-        (await this.page.$('form'));
-
+        (await (ctx as any).$('.selected form')) ||
+        (await (ctx as any).$('form:has(button[type="submit"])')) ||
+        (await (ctx as any).$('form'));
+  
       if (!form) {
-        await this.page.waitForSelector('input[placeholder], input[name], input[type="text"], input[type="number"]', {
+        await (ctx as any).waitForSelector('input[placeholder], input[name], input[type="text"], input[type="number"]', {
           visible: true,
           timeout: Math.max(15000, this.default_timeout * 10)
         });
       }
-
-      const ctx: puppeteer.Page | puppeteer.Frame = this.pickPokerFrame();
-
+  
+      // Name input (prefer ARIA role/name; fall back to generic inputs within form/frame)
       const nameInput =
         (await (ctx as any).$('::-p-aria(Name)[role="textbox"]')) ||
-        (await form?.$('input[placeholder*="name" i]')) ||
-        (await form?.$('input[name="name"]')) ||
-        (await form?.$('input[type="text"]')) ||
+        (form && await form.$('input[placeholder*="name" i]')) ||
+        (form && await form.$('input[name="name"]')) ||
+        (form && await form.$('input[type="text"]')) ||
         (await (ctx as any).waitForSelector('input[placeholder], input[name], input[type="text"]', {
           visible: true,
           timeout: this.default_timeout
         }));
       if (!nameInput) throw new Error('Name input not found');
-      await (nameInput as puppeteer.ElementHandle<Element>).click();
-      await this.page.keyboard.type(name);
-
+  
+      await (nameInput as any).click({ clickCount: 3 });
+      if ((nameInput as any).type) {
+        await (nameInput as any).type(name, { delay: 5 });
+      } else {
+        await this.page.keyboard.type(name, { delay: 5 });
+      }
+  
+      // Stack input (prefer ARIA spinbutton; fall back to numeric/generic)
       const stackInput =
         (await (ctx as any).$('::-p-aria(Stack)[role="spinbutton"]')) ||
-        (await form?.$('input[placeholder*="stack" i]')) ||
-        (await form?.$('input[name="stack"]')) ||
-        (await form?.$('input[type="number"]')) ||
+        (form && await form.$('input[placeholder*="stack" i]')) ||
+        (form && await form.$('input[name="stack"]')) ||
+        (form && await form.$('input[type="number"]')) ||
         (await (ctx as any).waitForSelector('input[type="number"], input[name], input[placeholder]', {
           visible: true,
           timeout: this.default_timeout
         }));
       if (!stackInput) throw new Error('Stack input not found');
-      await (stackInput as puppeteer.ElementHandle<Element>).click();
-      await this.page.keyboard.type(String(stack_size));
-
+  
+      await (stackInput as any).click({ clickCount: 3 });
+      if ((stackInput as any).type) {
+        await (stackInput as any).type(String(stack_size), { delay: 5 });
+      } else {
+        await this.page.keyboard.type(String(stack_size), { delay: 5 });
+      }
+  
+      // Join/submit button with ARIA fallback
       const joinBtn =
-        (await (ctx as any).$('button[type="submit"]')) ||
+        (form && await form.$('button[type="submit"]')) ||
         (await (ctx as any).$('::-p-aria(Join)[role="button"]')) ||
-        (await form?.$('button'));
+        (form && await form.$('button'));
       if (!joinBtn) throw new Error('Join/submit button not found');
-      await (joinBtn as puppeteer.ElementHandle<Element>).click();
+  
+      if (!(await this.isClickable(ctx, joinBtn))) {
+        throw new Error('Join button is not actionable');
+      }
+      await (joinBtn as any).click();
+  
     } catch (err) {
       return {
         code: 'error',
         error: new Error((err as Error).message || 'Could not enter a seat/join form') as E
       };
     }
-
+  
+    // Handle post-join alert (same frame)
     try {
-      await this.page.waitForSelector('.alert-1-buttons > button', { timeout: this.default_timeout });
-      await this.page.$eval('.alert-1-buttons > button', (button: any) => button.click());
+      await (ctx as any).waitForSelector('.alert-1-buttons > button', { timeout: this.default_timeout });
+      await (ctx as any).$eval('.alert-1-buttons > button', (button: any) => button.click());
     } catch {
       let message = 'Table ingress unsuccessful.';
-      if (await this.page.$('.selected form .error-message')) {
+      if (await (ctx as any).$('.selected form .error-message')) {
         message = 'Player name must be unique to game.';
       }
-      const cancelBtn = await this.page.$(".selected > button, button:has-text('Cancel')");
-      if (cancelBtn) await cancelBtn.click();
+      const cancelBtn = await (ctx as any).$(".selected > button, button:has-text('Cancel')");
+      if (cancelBtn) await (cancelBtn as any).click();
       return { code: 'error', error: new Error(message) as E };
     }
+  
     return { code: 'success', data: null as D, msg: 'Table ingress request successfully sent.' };
   }
-
+  
   async waitForTableEntry<D, E = Error>(): Response<D, E> {
+    const ctx = this.getPokerFrame();
     try {
-      await this.page.waitForSelector('.you-player', { timeout: this.default_timeout * 120 });
+      await (ctx as any).waitForSelector('.you-player', { timeout: this.default_timeout * 120 });
     } catch (_err) {
-      return {
-        code: 'error',
-        error: new Error('Table ingress request not accepted by host.') as E
-      };
+      return { code: 'error', error: new Error('Table ingress request not accepted by host.') as E };
     }
-    return {
-      code: 'success',
-      data: null as D,
-      msg: 'Successfully entered table.'
-    };
+    return { code: 'success', data: null as D, msg: 'Successfully entered table.' };
   }
-
+  
   async waitForNextHand<D, E = Error>(num_players: number, max_turn_length: number): Response<D, E> {
+    const ctx = this.getPokerFrame();
     try {
-      await this.page.waitForSelector(['.you-player > .waiting', '.you-player > .waiting-next-hand'].join(','), {
+      await (ctx as any).waitForSelector(['.you-player > .waiting', '.you-player > .waiting-next-hand'].join(','), {
         timeout: this.default_timeout
       });
     } catch (_err) {
-      return {
-        code: 'error',
-        error: new Error('Player is not in waiting state.') as E
-      };
+      return { code: 'error', error: new Error('Player is not in waiting state.') as E };
     }
     try {
-      await this.page.waitForSelector(['.you-player > .waiting', '.you-player > .waiting-next-hand'].join(','), {
+      await (ctx as any).waitForSelector(['.you-player > .waiting', '.you-player > .waiting-next-hand'].join(','), {
         hidden: true,
         timeout: computeTimeout(num_players, max_turn_length, 4) * 5 + this.default_timeout
       });
     } catch (_err) {
-      return {
-        code: 'error',
-        error: new Error('Player is not in waiting state.') as E
-      };
+      return { code: 'error', error: new Error('Player is not in waiting state.') as E };
     }
-    return {
-      code: 'success',
-      data: null as D,
-      msg: 'Waited for next hand to start.'
-    };
+    return { code: 'success', data: null as D, msg: 'Waited for next hand to start.' };
   }
+
 
   async getNumPlayers<D, E = Error>(): Response<D, E> {
     try {
