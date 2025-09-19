@@ -36,6 +36,16 @@ export class PuppeteerService {
     this.page = pages.find(p => (p.url() || '').includes('pokernow.club')) || await this.browser.newPage();
   }
 
+  async closeBrowser(): Promise<void> {
+    const ws = (process.env.BROWSER_WS_ENDPOINT || '').trim();
+    if (ws) {
+      // Attached to an external Chrome: detach only
+      this.browser.disconnect();
+    } else {
+      // Launched by this process: shut it down
+      await this.browser.close();
+    }
+  }
 
   async navigateToGame<D, E = Error>(game_id: string): Response<D, E> {
     if (!game_id) {
