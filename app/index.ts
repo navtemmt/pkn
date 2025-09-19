@@ -5,8 +5,10 @@ import bot_manager from './bot-manager.ts';
 // import player_router from './routes/player-routes.ts';
 // import db_service from './services/db-service.ts';
 
-const app = express();
+// Corrected: Added a closing parenthesis and passed the flag to the bot manager.
+const headless_flag = !process.argv.includes('--no-headless');
 
+const app = express();
 /* const port = 8080;
 app.use(express.json());
 app.get('/', (req: any, res:any) => {
@@ -18,6 +20,7 @@ app.use('/player', player_router);
 process.on('unhandledRejection', (reason, p) => {
   console.error('Unhandled Rejection:', reason);
 });
+
 process.on('uncaughtException', (err) => {
   console.error('Uncaught Exception:', err);
   process.exit(1);
@@ -38,7 +41,8 @@ async function startServer() {
 (async () => {
   try {
     await startServer();
-    await bot_manager();
+    // Corrected: Pass the headless_flag to the bot_manager
+    await bot_manager(headless_flag);
   } catch (err) {
     console.error('Fatal startup error:', err);
     process.exit(1);
@@ -47,8 +51,9 @@ async function startServer() {
 
 // Option B: promise chain (alternative)
 // void startServer()
-//   .then(() => bot_manager())
+//   .then(() => bot_manager(headless_flag))
 //   .catch((err) => {
 //     console.error('Fatal startup error:', err);
 //     process.exit(1);
 //   });
+
