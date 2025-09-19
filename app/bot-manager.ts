@@ -17,9 +17,12 @@ const webdriver_config: WebDriverConfig = webdriver_config_json;
 dotenv.config();
 
 const bot_manager = async function() {
-    // The interactive prompt has been removed. The game ID is now hardcoded.
-    const game_id = "pglA3x5V3hNj0dzgYizJZnXVt";
-    console.log(`✅ Using hardcoded game ID: ${game_id}`);
+  // Load from environment instead of hardcoding
+  const game_id = (process.env.GAME_ID || '').trim();
+  if (!game_id) {
+    throw new Error('Missing GAME_ID in environment (.env). Set GAME_ID=... in your .env file.');
+  }
+    console.log(`✅ Using game ID: ${game_id}`);
 
     const puppeteer_service = new PuppeteerService(webdriver_config.default_timeout, webdriver_config.headless_flag);
     await puppeteer_service.init();
