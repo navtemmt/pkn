@@ -101,37 +101,80 @@ export class PuppeteerService {
   }
 
 
+  // In PuppeteerService
+
   async waitForGameInfo<D, E = Error>(): Response<D, E> {
     try {
-      await this.page.waitForSelector('.game-infos > .blind-value-ctn > .blind-value', { timeout: this.default_timeout * 30 });
-    } catch (err) {
-      return {
-        code: "error",
-        error: new Error("Failed to wait for game information.") as E
+      // Try known containers first
+      const candidates = [
+        '.game-infos .blind-value-ctn .blind-value',
+        '.game-infos .blind-value',
+        '[class*="game"][class*="info"]',
+      ];
+      let found = false;
+      for (const sel of candidates) {
+        try {
+          await this.page.waitForSelector(sel, { timeout: this.default_timeout * 10, visible: true });
+          found = true;
+          break;
+        } catch {}
       }
+      // Fallback: wait until any text like "number / number" appears anywhere on the page
+      if (!found) {
+        await this.page.waitForFunction(() => {
+          const rx = /([0-9]+(?:\.[0-9]+)?)[^\S\r\n]*[/][^\S\r\n]*([0-9]+(?:\.[0-9]+)?)/;
+          const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
+          let node: Node | null;
+          while ((node = walker.nextNode())) {
+            const t = (node.textContent || '').trim();
+            if (rx.test(t)) return true;
+          }
+          return false;
+        }, { timeout: this.default_timeout * 15 });
+      }
+      return { code: 'success', data: null as D, msg: 'Game info is present.' };
+    } catch (err) {
+      return { code: 'error', error: new Error('Failed to wait for game information.') as E };
     }
-    return {
-      code: "success",
-      data: null as D,
-      msg: "Successfully waited for game information."
+  }
+  
+  async getGameInfo<D, E = Error>(): Response<D, E> {
+    try {
+      // Try specific selectors first
+      const selectors = [
+        '.game-infos .blind-value-ctn .blind-value',
+        '.game-infos .blind-value',
+        '.game-infos',
+      ];
+      let text = '';
+      for (const sel of selectors) {
+        const handle = await this.page.$(sel);
+        if (handle) {
+          text = (await this.page.$eval(sel, el => (el.textContent || '').trim())).trim();
+          if (text) break;
+        }
+      }
+      // Fallback: scan text nodes for a "small / big" pattern, tolerating currency and spaces
+      if (!text) {
+        text = await this.page.evaluate(() => {
+          const rx = /([A-Z]{1,3}\s*~\s*)?([£$€]?\s*\d+(?:\.\d+)?)[^\S\r\n]*\/[^\S\r\n]*([£$€]?\s*\d+(?:\.\d+)?)/i;
+          const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
+          let node: Node | null;
+          while ((node = walker.nextNode())) {
+            const t = (node.textContent || '').replace(/\s+/g, ' ').trim();
+            if (rx.test(t)) return t;
+          }
+          return '';
+        });
+      }
+      if (!text) throw new Error('No blinds text found');
+  
+      return { code: 'success', data: text as D, msg: 'Successfully grabbed the game info.' };
+    } catch (err) {
+      return { code: 'error', error: new Error('Could not get game info.') as E };
     }
   }
 
-  async getGameInfo<D, E = Error>(): Response<D, E> {
-    try {
-      const game_info = await this.page.$eval(".game-infos > .blind-value-ctn > .blind-value", (div: any) => div.textContent);
-      return {
-        code: "success",
-        data: game_info as D,
-        msg: "Successfully grabbed the game info."
-      }
-    } catch (err) {
-      return {
-        code: "error",
-        error: new Error("Could not get game info.") as E
-      }
-    }
-  }
 
   convertGameInfo(game_info: string): GameInfo {
     // Fix regex literal (avoid string-escaped \s pitfalls)
