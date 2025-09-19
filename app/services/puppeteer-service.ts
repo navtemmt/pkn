@@ -24,18 +24,39 @@ export class PuppeteerService {
   // Attach to an existing Chrome (BROWSER_WS_ENDPOINT) or launch normally
   async init(): Promise<void> {
     const ws = (process.env.BROWSER_WS_ENDPOINT || '').trim();
+    const httpBase = (process.env.BROWSER_URL || '').trim(); // e.g., http://127.0.0.1:9222
+  
     try {
-      this.browser = ws
-        ? await puppeteer.connect({ browserWSEndpoint: ws })
-        : await puppeteer.launch({ defaultViewport: null, headless: this.headless_flag });
+      if (ws.startsWith('ws://') || ws.startsWith('wss://')) {
+        this.browser = await puppeteer.connect({ browserWSEndpoint: ws });
+      } else if (httpBase.startsWith('http://') || httpBase.startsWith('https://')) {
+        this.browser = await puppeteer.connect({ browserURL: httpBase });
+      } else {
+        throw new Error('No valid connect URL found in env');
+      }
     } catch (e) {
-      throw new Error(`Browser init failed: ${(e as Error).message || e}`);
+      // Fallback: try to resolve from /json/version if http base is present
+      if (httpBase) {
+        try {
+          const res = await fetch(`${httpBase.replace(/\/$/, '')}/json/version`);
+          const data = await res.json();
+          if (data.webSocketDebuggerUrl) {
+            this.browser = await puppeteer.connect({ browserWSEndpoint: data.webSocketDebuggerUrl });
+          } else {
+            throw new Error('No webSocketDebuggerUrl in /json/version');
+          }
+        } catch (e2) {
+          throw new Error(`Browser init failed: ${(e as Error).message || e2}`);
+        }
+      } else {
+        throw new Error(`Browser init failed: ${(e as Error).message}`);
+      }
     }
-
+  
     const pages = await this.browser.pages();
-    this.page =
-      pages.find(p => (p.url() || '').includes('pokernow.club')) ||
-      (await this.browser.newPage());
+    this.page = pages.find(p => (p.url() || '').includes('pokernow.club')) || await this.browser.newPage();
+  }
+
 
     // Diagnostics: surface page errors and network failures to logs
     this.page.on('pageerror', err => console.error('pageerror:', err)); // JS errors inside the page [web:623][web:654]
