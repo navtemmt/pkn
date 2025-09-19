@@ -310,21 +310,19 @@ export class PuppeteerService {
   }
 
   async waitForBotTurnOrWinner<D, E = Error>(num_players: number, max_turn_length: number): Response<D, E> {
+    const timeout = computeTimeout(num_players, max_turn_length, 4) * 5 + this.default_timeout;
     try {
-      const el = await this.page.waitForSelector([".action-signal", ".table-player.winner"].join(','), { timeout: computeTimeout(num_players, max_turn_length, 4) * 5 + this.default_timeout });
-      const class_name = await this.page.evaluate(el => el!.className, el);
-      return {
-        code: "success",
-        data: class_name as D,
-        msg: `Waited for ${class_name}`
-      }
+      await this.page.waitForSelector('.game-decisions-ctn .action-buttons button:not([disabled])', { timeout });
+      return { code: 'success', data: 'action' as D, msg: 'Detected enabled action button(s).' };
+    } catch {}
+    try {
+      await this.page.waitForSelector('.table-player.winner', { timeout });
+      return { code: 'success', data: 'table-player winner' as D, msg: 'Detected winner element.' };
     } catch (err) {
-      return {
-        code: "error",
-        error: new Error("It is not the player's turn.") as E
-      }
+      return { code: 'error', error: new Error('No action or winner detected in time.') as E };
     }
   }
+
 
   async waitForBotTurnEnd<D, E = Error>(): Response<D, E> {
     try {
