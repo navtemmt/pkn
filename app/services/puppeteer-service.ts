@@ -24,50 +24,33 @@ export class PuppeteerService {
   // Attach to an existing Chrome (BROWSER_WS_ENDPOINT) or launch normally
   async init(): Promise<void> {
     const ws = (process.env.BROWSER_WS_ENDPOINT || '').trim();
-    const httpBase = (process.env.BROWSER_URL || '').trim(); // e.g., http://127.0.0.1:9222
-  
     try {
-      if (ws.startsWith('ws://') || ws.startsWith('wss://')) {
+      if (ws && (ws.startsWith('ws://') || ws.startsWith('wss://'))) {
         this.browser = await puppeteer.connect({ browserWSEndpoint: ws });
-      } else if (httpBase.startsWith('http://') || httpBase.startsWith('https://')) {
-        this.browser = await puppeteer.connect({ browserURL: httpBase });
       } else {
-        throw new Error('No valid connect URL found in env');
+        this.browser = await puppeteer.launch({ defaultViewport: null, headless: this.headless_flag });
       }
     } catch (e) {
-      // Fallback: try to resolve from /json/version if http base is present
-      if (httpBase) {
-        try {
-          const res = await fetch(`${httpBase.replace(/\/$/, '')}/json/version`);
-          const data = await res.json();
-          if (data.webSocketDebuggerUrl) {
-            this.browser = await puppeteer.connect({ browserWSEndpoint: data.webSocketDebuggerUrl });
-          } else {
-            throw new Error('No webSocketDebuggerUrl in /json/version');
-          }
-        } catch (e2) {
-          throw new Error(`Browser init failed: ${(e as Error).message || e2}`);
-        }
-      } else {
-        throw new Error(`Browser init failed: ${(e as Error).message}`);
-      }
+      throw new Error('Browser init failed: ' + (e as Error).message);
     }
   
     const pages = await this.browser.pages();
-    this.page = pages.find(p => (p.url() || '').includes('pokernow.club')) || await this.browser.newPage();
-  }
-
-
-    // Diagnostics: surface page errors and network failures to logs
-    this.page.on('pageerror', err => console.error('pageerror:', err)); // JS errors inside the page [web:623][web:654]
-    this.page.on('error', err => console.error('page crash/error:', err)); // page crash events [web:623][web:654]
+    const pokerPage = pages.find(p => {
+      const u = p.url() || '';
+      return u.indexOf('pokernow.club') !== -1;
+    });
+    this.page = pokerPage ? pokerPage : (await this.browser.newPage());
+  
+    // Diagnostics (no optional chaining)
+    this.page.on('pageerror', err => console.error('pageerror:', err));
+    this.page.on('error', err => console.error('page crash/error:', err));
     this.page.on('console', msg => {
-      // Helpful during debugging; demote/no-op in production as needed
-      console.log(`[console:${msg.type()}] ${msg.text()}`);
-    }); // capture page console output [web:623][web:654]
+      console.log('[console:' + msg.type() + '] ' + msg.text());
+    });
     this.page.on('requestfailed', req => {
-      console.warn('requestfailed:', req.url(), req.failure()?.errorText);
-    }); // network request failures [web:623][web:685]
+      const f = req.failure();
+      console.warn('requestfailed:', req.url(), f ? f.errorText : undefined);
+    });
   }
 
   async closeBrowser(): Promise<void> {
