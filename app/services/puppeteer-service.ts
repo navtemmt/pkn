@@ -99,13 +99,9 @@ export class PuppeteerService {
       return { code: 'error', error: new Error(`Failed to open game: ${(e as Error).message}`) as E };
     }
   }
-
-
-  // In PuppeteerService
-
+  
   async waitForGameInfo<D, E = Error>(): Response<D, E> {
     try {
-      // Try known containers first
       const candidates = [
         '.game-infos .blind-value-ctn .blind-value',
         '.game-infos .blind-value',
@@ -119,7 +115,6 @@ export class PuppeteerService {
           break;
         } catch {}
       }
-      // Fallback: wait until any text like "number / number" appears anywhere on the page
       if (!found) {
         await this.page.waitForFunction(() => {
           const rx = /([0-9]+(?:\.[0-9]+)?)[^\S\r\n]*[/][^\S\r\n]*([0-9]+(?:\.[0-9]+)?)/;
@@ -140,7 +135,6 @@ export class PuppeteerService {
   
   async getGameInfo<D, E = Error>(): Response<D, E> {
     try {
-      // Try specific selectors first
       const selectors = [
         '.game-infos .blind-value-ctn .blind-value',
         '.game-infos .blind-value',
@@ -154,7 +148,6 @@ export class PuppeteerService {
           if (text) break;
         }
       }
-      // Fallback: scan text nodes for a "small / big" pattern, tolerating currency and spaces
       if (!text) {
         text = await this.page.evaluate(() => {
           const rx = /([A-Z]{1,3}\s*~\s*)?([£$€]?\s*\d+(?:\.\d+)?)[^\S\r\n]*\/[^\S\r\n]*([£$€]?\s*\d+(?:\.\d+)?)/i;
@@ -168,24 +161,12 @@ export class PuppeteerService {
         });
       }
       if (!text) throw new Error('No blinds text found');
-  
       return { code: 'success', data: text as D, msg: 'Successfully grabbed the game info.' };
     } catch (err) {
       return { code: 'error', error: new Error('Could not get game info.') as E };
     }
   }
 
-
-  convertGameInfo(game_info: string): GameInfo {
-    // Fix regex literal (avoid string-escaped \s pitfalls)
-    const re = /([A-Z]+)~\s([0-9]+)\s\/\s([0-9]+)/;
-    const matches = re.exec(game_info);
-    if (matches && matches.length === 4) {
-      return { game_type: matches[1], big_blind: Number(matches[3]), small_blind: Number(matches[2]) };
-    } else {
-      throw new Error("Failed to convert game info.");
-    }
-  }
 
   // Advisor-only flow: skip joining if already seated or in observe-only mode
   async sendEnterTableRequest<D, E = Error>(name: string, stack_size: number): Response<D, E> {
