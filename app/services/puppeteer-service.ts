@@ -366,20 +366,52 @@ export class PuppeteerService {
       }
     }
   }
+  const ctx: any = this.pickPokerFrame();
+  const diag = await ctx.$$eval('.game-decisions-ctn .action-buttons button, .game-decisions-ctn .action-buttons [role="button"]', els =>
+    els.map(el => {
+      const b = el as HTMLButtonElement;
+      const aria = (el.getAttribute('aria-disabled') || '').toLowerCase();
+      const rect = el.getBoundingClientRect();
+      return {
+        text: (el.textContent || '').trim(),
+        disabledProp: (b as any).disabled === true,
+        ariaDisabled: aria === 'true',
+        hasDisabledClass: el.classList.contains('disabled'),
+        size: { w: rect.width, h: rect.height }
+      };
+    })
+  );
+  console.log('Decision controls snapshot:', diag);
 
+  // frame-aware version with robust enabled detection
   async waitForBotTurnOrWinner<D, E = Error>(num_players: number, max_turn_length: number): Response<D, E> {
     const timeout = computeTimeout(num_players, max_turn_length, 4) * 5 + this.default_timeout;
+    const ctx: any = this.pickPokerFrame(); // Frame or Page
+  
     try {
-      await this.page.waitForSelector('.game-decisions-ctn .action-buttons button:not([disabled])', { timeout });
-      return { code: 'success', data: 'action' as D, msg: 'Detected enabled action button(s).' };
+      // Any actionable button: not disabled attribute, not aria-disabled, not CSS .disabled, and visible
+      await ctx.waitForFunction(() => {
+        const btns = Array.from(document.querySelectorAll('.game-decisions-ctn .action-buttons button, .game-decisions-ctn .action-buttons [role="button"]')) as HTMLElement[];
+        return btns.some(b => {
+          const ariaDis = (b.getAttribute('aria-disabled') || '').toLowerCase() === 'true';
+          const hasDisabledClass = b.classList.contains('disabled');
+          const isDisabledProp = (b as HTMLButtonElement).disabled === true;
+          const rect = b.getBoundingClientRect();
+          const visible = !!(rect.width && rect.height);
+          return visible && !isDisabledProp && !ariaDis && !hasDisabledClass;
+        });
+      }, { timeout });
+      return { code: 'success', data: 'action' as D, msg: 'Detected actionable decision control.' };
     } catch {}
+  
     try {
-      await this.page.waitForSelector('.table-player.winner', { timeout });
+      await ctx.waitForSelector('.table-player.winner', { timeout });
       return { code: 'success', data: 'table-player winner' as D, msg: 'Detected winner element.' };
     } catch (err) {
       return { code: 'error', error: new Error('No action or winner detected in time.') as E };
     }
   }
+
 
 
   async waitForBotTurnEnd<D, E = Error>(): Response<D, E> {
