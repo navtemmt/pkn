@@ -5,7 +5,7 @@ import { Game } from './models/game.ts';
 import { Table } from './models/table.ts';
 import { GameState, PuppeteerService } from './services/puppeteer-service.ts';
 import { constructQuery } from './helpers/construct-query-helper.ts';
-import { DebugMode, logResponse, Response } from './utils/error-handling-utils.ts';
+import { DebugMode, logResponse } from './utils/error-handling-utils.ts';
 import { convertToBBs } from './utils/value-conversion-utils.ts';
 
 const prompt = (options: any): Promise<any> => new Enquirer().prompt(options);
@@ -42,7 +42,7 @@ export class Bot {
     public async run() {
         await this.openGame();
 
-        // Initialize Table and Game with placeholder values. They will be updated on the first hand.
+        // Initialize Table and Game with placeholder values.
         this.table = new Table();
         this.game = new Game(this.game_id, this.table, 2, 1, 'NLH', 30); // Default blinds 1/2
 
@@ -58,15 +58,8 @@ export class Bot {
                 await this.handlePauseMode();
                 continue;
             }
-
             console.log("\n🔄 Waiting for a new hand to start or for your turn...");
-            
-            if (this.manual_mode) {
-                await this.advisoryOneHand();
-            } else {
-                console.log("Full automation not implemented. Please run in manual mode.");
-                break;
-            }
+            await this.advisoryOneHand();
             this.hand_history = [];
             this.table.nextHand();
         }
@@ -120,7 +113,6 @@ export class Bot {
             const player = this.table.getPlayer(playerState.name);
             if (player) {
                 player.setBet(playerState.bet);
-                // Future logic for player status can be added here
             }
         });
         
@@ -131,7 +123,11 @@ export class Bot {
 
         const self = gameState.players.find(p => p.isSelf);
         if (self) {
-            this.updateHero(self.holeCards, convertToBBs(self.stack, this.game.getBigBlind()));
+            const hero = this.table.getHero();
+            if (hero) {
+                hero.setHand(self.holeCards);
+                hero.setStack(convertToBBs(self.stack, this.game.getBigBlind()));
+            }
         }
     }
 
@@ -167,7 +163,7 @@ export class Bot {
     }
 
     private async waitForUserExecution(): Promise<void> {
-        const response: any = await prompt({
+        const response = await prompt({
             type: 'select',
             name: 'action',
             message: 'Waiting for you to act. What next?',
@@ -178,12 +174,12 @@ export class Bot {
         });
 
         if (response.action === 'pause') {
-            this.paused = false;
+            this.paused = true;
         }
     }
 
     private async handlePauseMode(): Promise<void> {
-        const response: any = await prompt({
+        const response = await prompt({
             type: 'select',
             name: 'action',
             message: '⏸️  Advisor is paused. What would you like to do?',
@@ -215,14 +211,6 @@ export class Bot {
                 return this.queryBotAction(query, retries - 1);
             }
             throw e;
-        }
-    }
-    
-    private updateHero(hand: string[], stack_size: number): void {
-        const hero = this.table.getHero();
-        if (hero) {
-            hero.setHand(hand);
-            hero.setStack(stack_size);
         }
     }
 }
