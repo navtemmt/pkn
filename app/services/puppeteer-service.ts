@@ -65,36 +65,36 @@ export class PuppeteerService {
   // --- Main Login/Session Orchestrator with Logging ---
   // --- Main Login/Session Orchestrator with Login Verification ---
 // --- Main Login/Session Orchestrator with Manual Confirmation ---
-private async manageLoginAndCookies(): Promise<void> {
-  try {
-    await this.page.goto('about:blank');
-    await this.loadSession();
-    await this.page.goto('https://www.pokernow.club/', { waitUntil: 'networkidle2' });
-    console.log('INFO: Navigated to PokerNow with pre-loaded session.');
-
-    // Verify the login by checking for your avatar
-    const loginCheckSelector = '.user-avatar'; // The selector for the user avatar when logged in
+  private async manageLoginAndCookies(): Promise<void> {
     try {
-        await this.page.waitForSelector(loginCheckSelector, { timeout: 5000 });
-        console.log('SUCCESS: Login confirmed via session data.');
-    } catch (e) {
-        console.log('WARNING: Session data is stale or invalid. Forcing re-login.');
-        throw new Error('Stale session');
+      await this.page.goto('about:blank');
+      await this.loadSession();
+      await this.page.goto('https://www.pokernow.club/', { waitUntil: 'networkidle2' });
+      console.log('INFO: Navigated to PokerNow with pre-loaded session.');
+  
+      // Verify the login by checking for your avatar
+      const loginCheckSelector = '.user-avatar'; // The selector for the user avatar when logged in
+      try {
+          await this.page.waitForSelector(loginCheckSelector, { timeout: 5000 });
+          console.log('SUCCESS: Login confirmed via session data.');
+      } catch (e) {
+          console.log('WARNING: Session data is stale or invalid. Forcing re-login.');
+          throw new Error('Stale session');
+      }
+      
+    } catch (error) {
+      console.log('WARNING: No valid session found. Falling back to manual login.');
+      await this.page.goto('https://www.pokernow.club/', { waitUntil: 'networkidle2' });
+  
+      // --- THE KEY CHANGE IS HERE ---
+      // Instead of waiting for navigation, we wait for you to press Enter.
+      await waitForEnter('ACTION REQUIRED: Please log in to PokerNow in the browser, then press Enter in this console...');
+  
+      // Now that you've logged in and pressed Enter, we save the valid session.
+      console.log('INFO: Resuming script and saving the new session...');
+      await this.saveSession();
     }
-    
-  } catch (error) {
-    console.log('WARNING: No valid session found. Falling back to manual login.');
-    await this.page.goto('https://www.pokernow.club/', { waitUntil: 'networkidle2' });
-
-    // --- THE KEY CHANGE IS HERE ---
-    // Instead of waiting for navigation, we wait for you to press Enter.
-    await waitForEnter('ACTION REQUIRED: Please log in to PokerNow in the browser, then press Enter in this console...');
-
-    // Now that you've logged in and pressed Enter, we save the valid session.
-    console.log('INFO: Resuming script and saving the new session...');
-    await this.saveSession();
   }
-}
 
 
 
