@@ -445,7 +445,7 @@ export class PuppeteerService {
 
   // Frame-aware, robust turn detection
   async waitForBotTurnOrWinner<D, E = Error>(num_players: number, max_turn_length: number): Response<D, E> {
-    const timeout = computeTimeout(num_players, max_turn_length, 4) * 5 + this.default_timeout;
+    const timeout = 600000;
     const ctx: any = this.pickPokerFrame();
 
     try {
