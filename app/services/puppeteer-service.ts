@@ -38,12 +38,28 @@ export class PuppeteerService {
   }
 
   async init(): Promise<void> {
-    const ws = (process.env.BROWSER_WS_ENDPOINT || '').trim();
-    if (ws) {
-      this.browser = await puppeteer.connect({ browserWSEndpoint: ws });
-    } else {
-      this.browser = await puppeteer.launch({ defaultViewport: null, headless: this.headless_flag });
+    const wsEndpoint = (process.env.BROWSER_WS_ENDPOINT || '').trim();
+    const browserURL = (process.env.BROWSER_URL || '').trim();
+
+    try {
+      if (wsEndpoint.startsWith('ws://') || wsEndpoint.startsWith('wss://')) {
+        // Connect using a specific WebSocket endpoint
+        this.browser = await puppeteer.connect({ browserWSEndpoint: wsEndpoint });
+        console.log('INFO: Successfully connected to browser via WebSocket endpoint.');
+      } else if (browserURL.startsWith('http://') || browserURL.startsWith('https://')) {
+        // Connect using a base HTTP URL (more common for local debugging)
+        this.browser = await puppeteer.connect({ browserURL: browserURL });
+        console.log('INFO: Successfully connected to browser via HTTP URL.');
+      } else {
+        // Launch a new browser instance if no connection info is provided
+        console.log('INFO: No browser connection info found, launching new instance.');
+        this.browser = await puppeteer.launch({ defaultViewport: null, headless: this.headless_flag });
+      }
+    } catch (e) {
+        console.warn('WARN: Failed to connect to existing browser, launching a new one.', e);
+        this.browser = await puppeteer.launch({ defaultViewport: null, headless: this.headless_flag });
     }
+
     const pages = await this.browser.pages();
     this.page = pages.length > 0 ? pages[0] : await this.browser.newPage();
     
@@ -129,7 +145,7 @@ export class PuppeteerService {
   }
     
   async closeBrowser(): Promise<void> {
-    if ((process.env.BROWSER_WS_ENDPOINT || '').trim()) {
+    if ((process.env.BROWSER_WS_ENDPOINT || '').trim() || (process.env.BROWSER_URL || '').trim()) {
       this.browser.disconnect();
     } else {
       await this.browser.close();
@@ -189,13 +205,13 @@ export class PuppeteerService {
             isAllIn: el.classList.contains('all-in'),
             holeCards: Array.from(el.querySelectorAll('.table-player-cards .card')).map(cardEl => 
                 `${(cardEl.querySelector('.value') as HTMLElement)?.innerText}${(cardEl.querySelector('.sub-suit') as HTMLElement)?.innerText}`
-            )
+            ).filter(Boolean)
           };
         }).filter((p): p is Player => p !== null);
 
         const communityCards = Array.from(document.querySelectorAll('.table-community-cards .card')).map(cardEl => 
             `${(cardEl.querySelector('.value') as HTMLElement)?.innerText}${(cardEl.querySelector('.sub-suit') as HTMLElement)?.innerText}`
-        );
+        ).filter(Boolean);
 
         let pot = 0;
         const totalPotEl = document.querySelector('.table-pot-size .total-value');
