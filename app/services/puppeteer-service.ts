@@ -4,13 +4,8 @@ import type { Response } from '../utils/error-handling-utils.ts';
 import fs from 'fs/promises';
 
 const cookiesPath = './cookies.json';
-
-// You can keep your interface here or move it to a separate file
-interface GameInfo {
-  game_type: string;
-  big_blind: number;
-  small_blind: number;
-}
+const localStoragePath = './localStorage.json';
+const sessionStoragePath = './sessionStorage.json';
 
 export class PuppeteerService {
   private default_timeout: number;
@@ -19,20 +14,69 @@ export class PuppeteerService {
   private page!: puppeteer.Page;
   private observe_only: boolean = process.env.ADVISOR_OBSERVE === '1';
 
-  private async manageLoginAndCookies(): Promise<void> {
+  // --- Full Session Saving with Logging ---
+  private async saveSession(): Promise<void> {
     try {
-      const cookiesString = await fs.readFile(cookiesPath, 'utf8');
-      const cookies = JSON.parse(cookiesString);
-      await this.page.setCookie(...cookies);
-      console.log('✅ Session cookies loaded successfully.');
-      await this.page.goto('https://www.pokernow.club/', { waitUntil: 'networkidle2' });
-    } catch (error) {
-      console.log('⚠️ No saved session found. Please log in manually in the browser.');
-      await this.page.goto('https://www.pokernow.club/', { waitUntil: 'networkidle2' });
-      await this.page.waitForNavigation({ timeout: 180000 });
       const cookies = await this.page.cookies();
       await fs.writeFile(cookiesPath, JSON.stringify(cookies, null, 2));
-      console.log('✅ New session cookies saved.');
+      console.log(`INFO: Saved ${cookies.length} cookies.`);
+
+      const localStorageData = await this.page.evaluate(() => JSON.stringify(window.localStorage));
+      await fs.writeFile(localStoragePath, localStorageData);
+      console.log('INFO: Saved localStorage.');
+
+      const sessionStorageData = await this.page.evaluate(() => JSON.stringify(window.sessionStorage));
+      await fs.writeFile(sessionStoragePath, sessionStorageData);
+      console.log('INFO: Saved sessionStorage.');
+
+      console.log('SUCCESS: Full session has been saved.');
+    } catch (error) {
+      console.error('ERROR: Failed to save session:', error);
+    }
+  }
+
+  // --- Full Session Loading with Logging ---
+  private async loadSession(): Promise<void> {
+    console.log('INFO: Attempting to load saved session...');
+    
+    const cookies = JSON.parse(await fs.readFile(cookiesPath, 'utf8'));
+    await this.page.setCookie(...cookies);
+    console.log(`INFO: Loaded and set ${cookies.length} cookies.`);
+
+    const localStorageData = await fs.readFile(localStoragePath, 'utf8');
+    await this.page.evaluate(data => {
+      for (const [key, value] of Object.entries(JSON.parse(data))) {
+        localStorage.setItem(key, value as string);
+      }
+    }, localStorageData);
+    console.log('INFO: Loaded and set localStorage.');
+
+    const sessionStorageData = await fs.readFile(sessionStoragePath, 'utf8');
+    await this.page.evaluate(data => {
+      for (const [key, value] of Object.entries(JSON.parse(data))) {
+        sessionStorage.setItem(key, value as string);
+      }
+    }, sessionStorageData);
+    console.log('INFO: Loaded and set sessionStorage.');
+    
+    console.log('SUCCESS: Full session has been loaded.');
+  }
+
+  // --- Main Login/Session Orchestrator with Logging ---
+  private async manageLoginAndCookies(): Promise<void> {
+    try {
+      await this.page.goto('about:blank');
+      await this.loadSession();
+      await this.page.goto('https://www.pokernow.club/', { waitUntil: 'networkidle2' });
+      console.log('INFO: Navigated to PokerNow with pre-loaded session.');
+    } catch (error) {
+      console.log('WARNING: No saved session found or session is invalid. Falling back to manual login.');
+      await this.page.goto('https://www.pokernow.club/', { waitUntil: 'networkidle2' });
+
+      console.log('ACTION REQUIRED: Please log in to PokerNow in the browser. The script will wait for up to 3 minutes.');
+      await this.page.waitForNavigation({ timeout: 180000 });
+
+      await this.saveSession();
     }
   }
 
@@ -59,10 +103,8 @@ export class PuppeteerService {
     const pages = await this.browser.pages();
     const pokerPage = pages.find(p => (p.url() || '').includes('pokernow.club'));
     this.page = pokerPage ? pokerPage : (await this.browser.newPage());
-
-    // === ALL SETUP LOGIC GOES HERE, INSIDE init() ===
-
-    // 1. Set up diagnostic listeners (ESSENTIAL)
+    
+    // Set up diagnostic listeners
     this.page.on('pageerror', err => console.error('pageerror:', err));
     this.page.on('error', err => console.error('page crash/error:', err));
     this.page.on('console', msg => console.log(`[console:${msg.type()}] ${msg.text()}`));
@@ -71,7 +113,7 @@ export class PuppeteerService {
       console.warn('requestfailed:', req.url(), f ? f.errorText : undefined);
     });
 
-    // 2. Set up request interception (RECOMMENDED)
+    // Set up request interception
     await this.page.setRequestInterception(true);
     this.page.on('request', (request) => {
       if (request.url().includes('google-analytics.com')) {
@@ -81,7 +123,7 @@ export class PuppeteerService {
       }
     });
 
-    // 3. Handle login and session (CRITICAL)
+    // Handle login and session
     await this.manageLoginAndCookies();
   }
 
