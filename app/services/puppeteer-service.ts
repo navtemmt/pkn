@@ -198,6 +198,19 @@ export class PuppeteerService {
           if (m > -1) return num * 1000000;
           return num;
         };
+
+        // --- CORRECTED DEALER LOGIC ---
+        // 1. Find the dealer button element first.
+        const dealerButtonElement = document.querySelector('[class*="dealer-button-ctn"]');
+        let dealerSeat = -1;
+        if (dealerButtonElement) {
+          // 2. Extract the seat number from its class name (e.g., "dealer-position-7").
+          const dealerClass = Array.from(dealerButtonElement.classList).find(c => c.startsWith('dealer-position-'));
+          if (dealerClass) {
+            dealerSeat = parseInt(dealerClass.split('-')[2], 10);
+          }
+        }
+
         const players: Player[] = Array.from(document.querySelectorAll('.table-player')).map(el => {
           const seat = parseInt(el.getAttribute('data-seat') || '0', 10);
           const name = (el.querySelector('.table-player-name') as HTMLElement)?.innerText || '';
@@ -214,7 +227,8 @@ export class PuppeteerService {
             stack: parseValue(stackText),
             bet: parseValue(betText),
             isSelf: el.classList.contains('you-player'),
-            isDealer: !!el.querySelector('.table-dealer-button'),
+            // 3. Assign isDealer based on the seat number we found.
+            isDealer: seat === dealerSeat,
             isCurrentTurn: !!el.querySelector('.current-player-indicator'),
             isFolded: el.classList.contains('folded'),
             isAllIn: el.classList.contains('all-in'),
@@ -228,14 +242,11 @@ export class PuppeteerService {
           return `${value}${suit}`;
         });
 
-        // --- CORRECTED POT LOGIC ---
         let pot = 0;
-        // Prioritize the "total" pot value if it exists
         const totalPotText = (document.querySelector('.table-pot-size .total-value') as HTMLElement)?.innerText;
         if (totalPotText) {
             pot = parseValue(totalPotText);
         } else {
-            // Fallback to the main pot value if "total" is not found
             const mainPotText = (document.querySelector('.table-pot-size .main-value .normal-value') as HTMLElement)?.innerText;
             pot = parseValue(mainPotText);
         }
@@ -252,4 +263,5 @@ export class PuppeteerService {
       return null;
     }
   }
+
 }
