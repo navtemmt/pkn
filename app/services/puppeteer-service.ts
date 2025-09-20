@@ -63,22 +63,39 @@ export class PuppeteerService {
   }
 
   // --- Main Login/Session Orchestrator with Logging ---
-  private async manageLoginAndCookies(): Promise<void> {
+  // --- Main Login/Session Orchestrator with Login Verification ---
+private async manageLoginAndCookies(): Promise<void> {
+  try {
+    await this.page.goto('about:blank');
+    await this.loadSession();
+    await this.page.goto('https://www.pokernow.club/', { waitUntil: 'networkidle2' });
+    console.log('INFO: Navigated to PokerNow with pre-loaded session.');
+
+    // --- NEW: VERIFY THE LOGIN ---
+    // We check for an element that ONLY exists when you are logged in.
+    // A good candidate is the user avatar or a "logout" button.
+    // This selector might need to be adjusted based on PokerNow's actual HTML.
+    const loginCheckSelector = '.user-avatar-or-logout-button-selector'; // <-- IMPORTANT: Replace with a real selector
     try {
-      await this.page.goto('about:blank');
-      await this.loadSession();
-      await this.page.goto('https://www.pokernow.club/', { waitUntil: 'networkidle2' });
-      console.log('INFO: Navigated to PokerNow with pre-loaded session.');
-    } catch (error) {
-      console.log('WARNING: No saved session found or session is invalid. Falling back to manual login.');
-      await this.page.goto('https://www.pokernow.club/', { waitUntil: 'networkidle2' });
-
-      console.log('ACTION REQUIRED: Please log in to PokerNow in the browser. The script will wait for up to 3 minutes.');
-      await this.page.waitForNavigation({ timeout: 180000 });
-
-      await this.saveSession();
+        await this.page.waitForSelector(loginCheckSelector, { timeout: 5000 }); // Wait 5 seconds
+        console.log('SUCCESS: Login confirmed via session data.');
+    } catch (e) {
+        console.log('WARNING: Session data is stale or invalid. Forcing re-login.');
+        throw new Error('Stale session'); // Throw an error to jump to the catch block
     }
+    
+  } catch (error) {
+    // This block now catches both "no session file" and "stale session" errors
+    console.log('WARNING: No valid session found. Falling back to manual login.');
+    await this.page.goto('https://www.pokernow.club/', { waitUntil: 'networkidle2' });
+
+    console.log('ACTION REQUIRED: Please log in to PokerNow in the browser. The script will wait for up to 3 minutes.');
+    await this.page.waitForNavigation({ timeout: 180000 });
+
+    await this.saveSession();
   }
+}
+
 
   constructor(default_timeout: number, headless_flag: boolean) {
     this.default_timeout = default_timeout;
