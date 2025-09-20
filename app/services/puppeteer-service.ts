@@ -67,6 +67,7 @@ export class PuppeteerService {
   // --- Main Login/Session Orchestrator with Login Verification ---
 // --- Main Login/Session Orchestrator with Manual Confirmation ---
   // --- Main Login/Session Orchestrator with a REAL Login Check ---
+  // --- Main Login/Session Orchestrator with Correct Login Verification ---
   private async manageLoginAndCookies(): Promise<void> {
     try {
       await this.page.goto('about:blank');
@@ -74,10 +75,10 @@ export class PuppeteerService {
       await this.page.goto('https://www.pokernow.club/', { waitUntil: 'networkidle2' });
       console.log('INFO: Navigated to PokerNow with pre-loaded session.');
   
-      // --- THE FIX IS HERE: Using the correct selector ---
-      const loginCheckSelector = '.user-avatar'; // This is the real selector for the user profile icon.
+      // --- THE FIX IS HERE: Using the correct selector for the LOGOUT button ---
+      const loginCheckSelector = 'a[href*="/sessions/destroy"]'; // This targets the "LOGOUT" link.
       
-      console.log('INFO: Verifying login status...');
+      console.log('INFO: Verifying login status by looking for the LOGOUT button...');
       try {
           await this.page.waitForSelector(loginCheckSelector, { timeout: 5000 });
           console.log('SUCCESS: Login confirmed. Session is valid.');
@@ -97,6 +98,7 @@ export class PuppeteerService {
       await this.saveSession();
     }
   }
+
 
 
 
