@@ -2,6 +2,7 @@ import puppeteer from 'puppeteer';
 import { computeTimeout, sleep } from '../helpers/bot-helper.ts';
 import type { Response } from '../utils/error-handling-utils.ts';
 import fs from 'fs/promises';
+import { computeTimeout, sleep, waitForEnter } from '../helpers/bot-helper.ts';
 
 const cookiesPath = './cookies.json';
 const localStoragePath = './localStorage.json';
