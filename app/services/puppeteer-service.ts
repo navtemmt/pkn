@@ -221,13 +221,25 @@ export class PuppeteerService {
             holeCards: holeCards.filter(c => c.length === 2)
           };
         }).filter(p => p.name);
+
         const communityCards = Array.from(document.querySelectorAll('.table-community-cards .card')).map(cardEl => {
           const value = (cardEl.querySelector('.value') as HTMLElement)?.innerText || '';
           const suit = (cardEl.querySelector('.sub-suit') as HTMLElement)?.innerText || '';
           return `${value}${suit}`;
         });
-        const potText = (document.querySelector('.table-pot-size .main-value') as HTMLElement)?.innerText;
-        const pot = parseValue(potText);
+
+        // --- CORRECTED POT LOGIC ---
+        let pot = 0;
+        // Prioritize the "total" pot value if it exists
+        const totalPotText = (document.querySelector('.table-pot-size .total-value') as HTMLElement)?.innerText;
+        if (totalPotText) {
+            pot = parseValue(totalPotText);
+        } else {
+            // Fallback to the main pot value if "total" is not found
+            const mainPotText = (document.querySelector('.table-pot-size .main-value .normal-value') as HTMLElement)?.innerText;
+            pot = parseValue(mainPotText);
+        }
+
         return {
           players,
           communityCards: communityCards.filter(c => c.length === 2),
