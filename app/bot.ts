@@ -53,8 +53,6 @@ export class Bot {
             await this.promptUserConfirmation("Ready to start advisory mode?");
         }
 
-        // The old enterTableInProgress() is no longer needed as you will be seated manually.
-
         while (true) {
             if (this.paused) {
                 await this.handlePauseMode();
@@ -77,9 +75,6 @@ export class Bot {
     private async advisoryOneHand() {
         while (true) {
             console.log("👀 Monitoring for your turn or hand end...");
-
-            // This is a simple polling mechanism. A more advanced version could use
-            // waitForFunction to be more efficient.
             await sleep(3000); 
 
             const gameState = await this.puppeteer_service.getTableState();
@@ -97,14 +92,12 @@ export class Bot {
                 console.log("🎯".repeat(20));
 
                 this.updateModelsFromState(gameState);
-
                 const query = constructQuery(this.game);
                 
                 try {
                     console.log("🤖 Getting AI recommendation...");
                     const bot_action = await this.queryBotAction(query, this.query_retries);
                     await this.displayAdvice(bot_action);
-                    this.table.resetPlayerActions();
                 } catch (err) {
                     console.log("❌ Failed to get AI advice:", err);
                     await this.displayFallbackAdvice();
@@ -114,7 +107,7 @@ export class Bot {
 
             } else if (this.isHandOver(gameState)) {
                 console.log("🏆 Hand completed.");
-                this.updateModelsFromState(gameState); // Final update for end-of-hand stats
+                this.updateModelsFromState(gameState);
                 break; 
             }
         }
@@ -130,8 +123,7 @@ export class Bot {
                 // Future logic for player status can be added here
             }
         });
-        // Assuming blinds might change, we can try to find them from the game title, e.g., "NLH ~ 1 / 2"
-        // This is a simple placeholder; a more robust solution would parse this dynamically.
+        
         this.game.setBigBlind(2); 
         this.game.setSmallBlind(1);
         this.game.setPot(convertToBBs(gameState.pot, this.game.getBigBlind()));
@@ -145,8 +137,6 @@ export class Bot {
 
     private isHandOver(gameState: GameState): boolean {
         const activePlayers = gameState.players.filter(p => !p.isFolded).length;
-        // A hand is over if only one player hasn't folded, or the river is dealt and betting is complete.
-        // This is a simplification; a full implementation would also check if betting is closed.
         const isShowdown = gameState.communityCards.length === 5; 
         return activePlayers <= 1 || (isShowdown && !gameState.players.some(p => p.isCurrentTurn));
     }
@@ -154,9 +144,9 @@ export class Bot {
     private async openGame() {
         console.log(`The PokerNow game with id: ${this.game_id} will now open.`);
         const navigateResponse = await this.puppeteer_service.navigateToGame(this.game_id);
-        logResponse(navigateResponse as any); // Cast to any to satisfy logResponse if types mismatch
+        logResponse(navigateResponse as any);
 
-        if (navigateResponse.code === 'error') {
+        if ((navigateResponse as any).code === 'error') {
             throw new Error('Failed to open game.');
         }
     }
