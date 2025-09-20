@@ -178,7 +178,7 @@ export class Bot {
         });
 
         if (response.action === 'pause') {
-            this.paused = true;
+            this.paused = false;
         }
     }
 
