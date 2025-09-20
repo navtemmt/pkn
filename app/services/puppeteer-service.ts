@@ -69,6 +69,7 @@ export class PuppeteerService {
   // --- Main Login/Session Orchestrator with a REAL Login Check ---
   // --- Main Login/Session Orchestrator with Correct Login Verification ---
   // --- Final Version: Main Login/Session Orchestrator with Robust Verification ---
+  // --- Final Version: Main Login/Session Orchestrator with Patient Verification ---
   private async manageLoginAndCookies(): Promise<void> {
     try {
       await this.page.goto('about:blank');
@@ -76,25 +77,18 @@ export class PuppeteerService {
       await this.page.goto('https://www.pokernow.club/', { waitUntil: 'networkidle2' });
       console.log('INFO: Navigated to PokerNow with pre-loaded session.');
   
-      // Give the page an extra 2 seconds for JavaScript components to render.
-      await sleep(2000);
-  
       console.log('INFO: Verifying login status by looking for the LOGOUT button...');
       const loginCheckSelector = 'a[href*="/sessions/destroy"]';
       
-      // Perform a direct check for the element. page.$() returns the element or null.
-      const logoutButton = await this.page.$(loginCheckSelector);
+      // Wait for up to 5 seconds for the logout button to appear.
+      // This gives client-side JavaScript time to render the header.
+      await this.page.waitForSelector(loginCheckSelector, { timeout: 5000 });
   
-      if (logoutButton) {
-          // If the button was found, the session is valid.
-          console.log('SUCCESS: Login confirmed. Session is valid.');
-      } else {
-          // If the button was not found, the session is stale.
-          console.log('WARNING: Login verification failed. Session may be stale.');
-          throw new Error('Stale session'); // Jump to the catch block for manual login.
-      }
+      console.log('SUCCESS: Login confirmed. Session is valid.');
       
     } catch (error) {
+      // This catch block will now only execute if the session files don't exist,
+      // OR if the logout button doesn't appear after 5 seconds.
       console.log('WARNING: No valid session found. Falling back to manual login.');
       await this.page.goto('https://www.pokernow.club/', { waitUntil: 'networkidle2' });
   
@@ -105,7 +99,8 @@ export class PuppeteerService {
       await this.saveSession();
     }
   }
-
+  
+  
 
 
 
