@@ -24,7 +24,7 @@ export class Bot {
         ai_service: AIService,
         puppeteer_service: PuppeteerService,
         game_id: string,
-        debug_mode: DebugMode,
+        _debug_mode: DebugMode, // underscore to indicate it's not used internally
         query_retries: number,
         manual_mode: boolean = true
     ) {
@@ -37,9 +37,8 @@ export class Bot {
 
     public async run() {
         await this.openGame();
-
         this.table = new Table();
-        this.game = new Game(this.game_id, this.table, 2, 1, 'NLH', 30); // Default blinds 1/2
+        this.game = new Game(this.game_id, this.table, 2, 1, 'NLH', 30);
 
         if (this.manual_mode) {
             console.log("🎯 MANUAL ADVISOR MODE");
@@ -59,37 +58,42 @@ export class Bot {
 
     private async advisoryOneHand() {
         while (true) {
-            console.log("👀 Monitoring for your turn or hand end...");
-            await sleep(3000); 
+            try { // PATCH: Added try...catch for robustness
+                console.log("👀 Monitoring for your turn or hand end...");
+                await sleep(3000); 
 
-            const gameState = await this.puppeteer_service.getTableState();
+                const gameState = await this.puppeteer_service.getTableState();
 
-            if (!gameState || !gameState.players.some(p => p.isSelf)) {
-                console.log("Could not find hero player on table. Retrying...");
-                continue;
-            }
-            
-            const self = gameState.players.find(p => p.isSelf);
-
-            if (self && self.isCurrentTurn) {
-                console.log("\n" + "🎯".repeat(20) + "\n🚨 IT'S YOUR TURN! 🚨\n" + "🎯".repeat(20));
-                this.updateModelsFromState(gameState);
-                const query = constructQuery(this.game);
-                
-                try {
-                    console.log("🤖 Getting AI recommendation...");
-                    const bot_action = await this.queryBotAction(query, this.query_retries);
-                    await this.displayAdvice(bot_action);
-                } catch (err) {
-                    console.log("❌ Failed to get AI advice:", err);
-                    await this.displayFallbackAdvice();
+                if (!gameState || !gameState.players.some(p => p.isSelf)) {
+                    console.log("Could not find hero player on table. Retrying...");
+                    continue;
                 }
-                await this.waitForUserExecution();
+                
+                const self = gameState.players.find(p => p.isSelf);
 
-            } else if (this.isHandOver(gameState)) {
-                console.log("🏆 Hand completed.");
-                this.updateModelsFromState(gameState); 
-                break; 
+                if (self && self.isCurrentTurn) {
+                    console.log("\n" + "🎯".repeat(20) + "\n🚨 IT'S YOUR TURN! 🚨\n" + "🎯".repeat(20));
+                    this.updateModelsFromState(gameState);
+                    const query = constructQuery(this.game);
+                    
+                    try {
+                        console.log("🤖 Getting AI recommendation...");
+                        const bot_action = await this.queryBotAction(query, this.query_retries);
+                        await this.displayAdvice(bot_action);
+                    } catch (err) {
+                        console.log("❌ Failed to get AI advice:", err);
+                        await this.displayFallbackAdvice();
+                    }
+                    await this.waitForUserExecution();
+
+                } else if (this.isHandOver(gameState)) {
+                    console.log("🏆 Hand completed.");
+                    this.updateModelsFromState(gameState); 
+                    break; 
+                }
+            } catch (error) {
+                console.error("An error occurred in the advisory loop. Retrying...", error);
+                await sleep(5000); // Wait before retrying to avoid spamming errors
             }
         }
     }
@@ -142,7 +146,7 @@ export class Bot {
     }
 
     private async waitForUserExecution(): Promise<void> {
-        const { action } = await prompt({
+        const { action } = await prompt<{action: string}>({
             type: 'select',
             name: 'action',
             message: 'Waiting for you to act. What next?',
@@ -152,7 +156,7 @@ export class Bot {
     }
 
     private async handlePauseMode(): Promise<void> {
-        const { action } = await prompt({
+        const { action } = await prompt<{action: string}>({
             type: 'select',
             name: 'action',
             message: '⏸️  Advisor is paused. What would you like to do?',
@@ -163,7 +167,7 @@ export class Bot {
     }
 
     private async promptUserConfirmation(message: string): Promise<void> {
-        const { confirmed } = await prompt({ type: 'confirm', name: 'confirmed', message });
+        const { confirmed } = await prompt<{confirmed: boolean}>({ type: 'confirm', name: 'confirmed', message });
         if (!confirmed) process.exit(0);
     }
 
