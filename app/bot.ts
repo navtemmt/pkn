@@ -212,22 +212,19 @@ export class Bot {
 
     // --- Original Bot Methods (Restored) ---
 
+    // Inside app/bot.ts
+
     private async openGame() {
         console.log(`The PokerNow game with id: ${this.game_id} will now open.`);
-        logResponse(await this.puppeteer_service.navigateToGame(this.game_id), this.debug_mode);
-        logResponse(await this.puppeteer_service.waitForGameInfo(), this.debug_mode);
-
-        console.log("Getting game info.");
-        const res = await this.puppeteer_service.getGameInfo();
-        logResponse(res, this.debug_mode);
-        if (res.code == "success") {
-            const game_info = this.puppeteer_service.convertGameInfo(res.data as string);
-            this.table = new Table(this.player_service);
-            this.game = new Game(this.game_id, this.table, game_info.big_blind, game_info.small_blind, game_info.game_type, 30);
-        } else {
-            throw new Error ("Failed to get game info.");
+        const navigateResponse = await this.puppeteer_service.navigateToGame(this.game_id);
+        logResponse(navigateResponse);
+    
+        if (navigateResponse.code === 'error') {
+            throw new Error('Failed to open game.');
         }
+        // All game info logic has been removed, as it will now be handled by getTableState()
     }
+
 
     private async enterTableInProgress() {
       // Prefer environment variables; fall back to prompts if missing
