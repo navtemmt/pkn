@@ -162,11 +162,20 @@ export class PuppeteerService {
     }
   }
 
-  async navigateToGame(game_id: string): Promise<void> {
-    if (!game_id) throw new Error('Game id cannot be empty.');
-    await this.page.goto(`https://www.pokernow.club/games/${game_id}`, { waitUntil: 'networkidle2' });
-    await this.page.setViewport({ width: 1280, height: 800 });
+  async navigateToGame(game_id: string): Promise<Response<null, Error>> {
+    if (!game_id) {
+      return { code: 'error', error: new Error('Game id cannot be empty.') };
+    }
+    
+    try {
+      await this.page.goto(`https://www.pokernow.club/games/${game_id}`, { waitUntil: 'networkidle2' });
+      await this.page.setViewport({ width: 1280, height: 800 });
+      return { code: 'success', data: null, msg: `Opened PokerNow game ${game_id}` };
+    } catch (e) {
+      return { code: 'error', error: new Error(`Failed to open game: ${(e as Error).message}`) };
+    }
   }
+
 
   // --- Consolidated Game State Scraping ---
   private pickPokerFrame(): puppeteer.Page | puppeteer.Frame {
