@@ -66,6 +66,7 @@ export class PuppeteerService {
   // --- Main Login/Session Orchestrator with Logging ---
   // --- Main Login/Session Orchestrator with Login Verification ---
 // --- Main Login/Session Orchestrator with Manual Confirmation ---
+  // --- Main Login/Session Orchestrator with a REAL Login Check ---
   private async manageLoginAndCookies(): Promise<void> {
     try {
       await this.page.goto('about:blank');
@@ -73,29 +74,30 @@ export class PuppeteerService {
       await this.page.goto('https://www.pokernow.club/', { waitUntil: 'networkidle2' });
       console.log('INFO: Navigated to PokerNow with pre-loaded session.');
   
-      // Verify the login by checking for your avatar
-      const loginCheckSelector = '.user-avatar'; // The selector for the user avatar when logged in
+      // --- THE FIX IS HERE: Using the correct selector ---
+      const loginCheckSelector = '.user-avatar'; // This is the real selector for the user profile icon.
+      
+      console.log('INFO: Verifying login status...');
       try {
           await this.page.waitForSelector(loginCheckSelector, { timeout: 5000 });
-          console.log('SUCCESS: Login confirmed via session data.');
+          console.log('SUCCESS: Login confirmed. Session is valid.');
       } catch (e) {
-          console.log('WARNING: Session data is stale or invalid. Forcing re-login.');
-          throw new Error('Stale session');
+          console.log('WARNING: Login verification failed. Session may be stale.');
+          throw new Error('Stale session'); // Jump to the catch block for manual login.
       }
       
     } catch (error) {
       console.log('WARNING: No valid session found. Falling back to manual login.');
       await this.page.goto('https://www.pokernow.club/', { waitUntil: 'networkidle2' });
   
-      // --- THE KEY CHANGE IS HERE ---
-      // Instead of waiting for navigation, we wait for you to press Enter.
+      // Wait for you to manually log in and press Enter.
       await waitForEnter('ACTION REQUIRED: Please log in to PokerNow in the browser, then press Enter in this console...');
   
-      // Now that you've logged in and pressed Enter, we save the valid session.
-      console.log('INFO: Resuming script and saving the new session...');
+      console.log('INFO: Resuming script and saving new session...');
       await this.saveSession();
     }
   }
+
 
 
 
