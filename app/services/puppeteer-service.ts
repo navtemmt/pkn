@@ -68,6 +68,7 @@ export class PuppeteerService {
 // --- Main Login/Session Orchestrator with Manual Confirmation ---
   // --- Main Login/Session Orchestrator with a REAL Login Check ---
   // --- Main Login/Session Orchestrator with Correct Login Verification ---
+  // --- Final Version: Main Login/Session Orchestrator with Robust Verification ---
   private async manageLoginAndCookies(): Promise<void> {
     try {
       await this.page.goto('about:blank');
@@ -75,14 +76,20 @@ export class PuppeteerService {
       await this.page.goto('https://www.pokernow.club/', { waitUntil: 'networkidle2' });
       console.log('INFO: Navigated to PokerNow with pre-loaded session.');
   
-      // --- THE FIX IS HERE: Using the correct selector for the LOGOUT button ---
-      const loginCheckSelector = 'a[href*="/sessions/destroy"]'; // This targets the "LOGOUT" link.
-      
+      // Give the page an extra 2 seconds for JavaScript components to render.
+      await sleep(2000);
+  
       console.log('INFO: Verifying login status by looking for the LOGOUT button...');
-      try {
-          await this.page.waitForSelector(loginCheckSelector, { timeout: 5000 });
+      const loginCheckSelector = 'a[href*="/sessions/destroy"]';
+      
+      // Perform a direct check for the element. page.$() returns the element or null.
+      const logoutButton = await this.page.$(loginCheckSelector);
+  
+      if (logoutButton) {
+          // If the button was found, the session is valid.
           console.log('SUCCESS: Login confirmed. Session is valid.');
-      } catch (e) {
+      } else {
+          // If the button was not found, the session is stale.
           console.log('WARNING: Login verification failed. Session may be stale.');
           throw new Error('Stale session'); // Jump to the catch block for manual login.
       }
@@ -98,6 +105,7 @@ export class PuppeteerService {
       await this.saveSession();
     }
   }
+
 
 
 
