@@ -70,6 +70,27 @@ export class PuppeteerService {
   // --- Main Login/Session Orchestrator with Correct Login Verification ---
   // --- Final Version: Main Login/Session Orchestrator with Robust Verification ---
   // --- Final Version: Main Login/Session Orchestrator with Patient Verification ---
+  // --- NEW: Robust Polling Function for Login Verification ---
+  private async isLoggedIn(): Promise<boolean> {
+    const loginCheckSelector = 'a[href*="/sessions/destroy"]';
+    
+    // Poll the page 10 times over 5 seconds.
+    for (let i = 0; i < 10; i++) {
+      // Directly check if the element exists.
+      const logoutButton = await this.page.$(loginCheckSelector);
+      if (logoutButton) {
+        return true; // Found it! The user is logged in.
+      }
+      // If not found, wait 500ms before trying again.
+      await sleep(500); 
+    }
+    
+    // If the loop completes without finding the button, the user is not logged in.
+    return false;
+  }
+
+  
+  // --- Final Version: Using a Polling Function for Verification ---
   private async manageLoginAndCookies(): Promise<void> {
     try {
       await this.page.goto('about:blank');
@@ -77,18 +98,19 @@ export class PuppeteerService {
       await this.page.goto('https://www.pokernow.club/', { waitUntil: 'networkidle2' });
       console.log('INFO: Navigated to PokerNow with pre-loaded session.');
   
-      console.log('INFO: Verifying login status by looking for the LOGOUT button...');
-      const loginCheckSelector = 'a[href*="/sessions/destroy"]';
+      console.log('INFO: Verifying login status using aggressive polling...');
       
-      // Wait for up to 5 seconds for the logout button to appear.
-      // This gives client-side JavaScript time to render the header.
-      await this.page.waitForSelector(loginCheckSelector, { timeout: 5000 });
+      // Call our new, robust polling function.
+      const loggedIn = await this.isLoggedIn();
   
-      console.log('SUCCESS: Login confirmed. Session is valid.');
+      if (loggedIn) {
+          console.log('SUCCESS: Login confirmed. Session is valid.');
+      } else {
+          console.log('WARNING: Login verification failed after polling. Session is stale.');
+          throw new Error('Stale session'); // Jump to the catch block for manual login.
+      }
       
     } catch (error) {
-      // This catch block will now only execute if the session files don't exist,
-      // OR if the logout button doesn't appear after 5 seconds.
       console.log('WARNING: No valid session found. Falling back to manual login.');
       await this.page.goto('https://www.pokernow.club/', { waitUntil: 'networkidle2' });
   
@@ -100,6 +122,7 @@ export class PuppeteerService {
     }
   }
   
+    
   
 
 
