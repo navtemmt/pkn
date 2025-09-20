@@ -14,9 +14,7 @@ export class Bot {
     private ai_service: AIService;
     private puppeteer_service: PuppeteerService;
     private game_id: string;
-    private debug_mode: DebugMode;
     private query_retries: number;
-    private hand_history: any[];
     private table!: Table;
     private game!: Game;
     private manual_mode: boolean = true;
@@ -33,23 +31,18 @@ export class Bot {
         this.ai_service = ai_service;
         this.puppeteer_service = puppeteer_service;
         this.game_id = game_id;
-        this.debug_mode = debug_mode;
         this.query_retries = query_retries;
         this.manual_mode = manual_mode;
-        this.hand_history = [];
     }
 
     public async run() {
         await this.openGame();
 
-        // Initialize Table and Game with placeholder values.
         this.table = new Table();
         this.game = new Game(this.game_id, this.table, 2, 1, 'NLH', 30); // Default blinds 1/2
 
         if (this.manual_mode) {
             console.log("🎯 MANUAL ADVISOR MODE");
-            console.log("⚠️  Bot will provide advice but NOT execute actions automatically");
-            console.log("🎮 You must manually click buttons on PokerNow");
             await this.promptUserConfirmation("Ready to start advisory mode?");
         }
 
@@ -60,7 +53,6 @@ export class Bot {
             }
             console.log("\n🔄 Waiting for a new hand to start or for your turn...");
             await this.advisoryOneHand();
-            this.hand_history = [];
             this.table.nextHand();
         }
     }
@@ -72,18 +64,15 @@ export class Bot {
 
             const gameState = await this.puppeteer_service.getTableState();
 
-            if (!gameState) {
-                console.log("Could not capture table state. Retrying...");
+            if (!gameState || !gameState.players.some(p => p.isSelf)) {
+                console.log("Could not find hero player on table. Retrying...");
                 continue;
             }
-
+            
             const self = gameState.players.find(p => p.isSelf);
 
             if (self && self.isCurrentTurn) {
-                console.log("\n" + "🎯".repeat(20));
-                console.log("🚨 IT'S YOUR TURN! 🚨");
-                console.log("🎯".repeat(20));
-
+                console.log("\n" + "🎯".repeat(20) + "\n🚨 IT'S YOUR TURN! 🚨\n" + "🎯".repeat(20));
                 this.updateModelsFromState(gameState);
                 const query = constructQuery(this.game);
                 
@@ -95,12 +84,11 @@ export class Bot {
                     console.log("❌ Failed to get AI advice:", err);
                     await this.displayFallbackAdvice();
                 }
-
                 await this.waitForUserExecution();
 
             } else if (this.isHandOver(gameState)) {
                 console.log("🏆 Hand completed.");
-                this.updateModelsFromState(gameState);
+                this.updateModelsFromState(gameState); 
                 break; 
             }
         }
@@ -109,24 +97,21 @@ export class Bot {
     private updateModelsFromState(gameState: GameState) {
         this.table.clearPlayers();
         gameState.players.forEach(playerState => {
-            this.table.addPlayer(playerState.name, playerState.stack, playerState.seat);
-            const player = this.table.getPlayer(playerState.name);
-            if (player) {
-                player.setBet(playerState.bet);
-            }
+            const player = this.table.addPlayer(playerState.name, playerState.stack, playerState.seat);
+            player.setBet(playerState.bet);
         });
         
-        this.game.setBigBlind(2); 
-        this.game.setSmallBlind(1);
         this.game.setPot(convertToBBs(gameState.pot, this.game.getBigBlind()));
         this.game.setCommunityCards(gameState.communityCards);
 
-        const self = gameState.players.find(p => p.isSelf);
-        if (self) {
+        const selfState = gameState.players.find(p => p.isSelf);
+        if (selfState) {
             const hero = this.table.getHero();
             if (hero) {
-                hero.setHand(self.holeCards);
-                hero.setStack(convertToBBs(self.stack, this.game.getBigBlind()));
+                hero.setHand(selfState.holeCards);
+                hero.setStack(convertToBBs(selfState.stack, this.game.getBigBlind()));
+            } else {
+                this.table.setHero(selfState.name);
             }
         }
     }
@@ -140,65 +125,46 @@ export class Bot {
     private async openGame() {
         console.log(`The PokerNow game with id: ${this.game_id} will now open.`);
         const navigateResponse = await this.puppeteer_service.navigateToGame(this.game_id);
-        logResponse(navigateResponse as any);
-
-        if ((navigateResponse as any).code === 'error') {
+        logResponse(navigateResponse);
+        if (navigateResponse.code === 'error') {
             throw new Error('Failed to open game.');
         }
     }
 
     private async displayAdvice(bot_action: BotAction): Promise<void> {
-        console.log("\n💡 AI Recommendation:");
-        console.log(`   Action: ${bot_action.action.toUpperCase()}`);
-        if (bot_action.action === 'bet' || bot_action.action === 'raise') {
-            console.log(`   Amount: ${bot_action.amount}`);
-        }
+        console.log(`\n💡 AI Recommendation: ${bot_action.action.toUpperCase()}`);
+        if (bot_action.amount) console.log(`   Amount: ${bot_action.amount}`);
         console.log(`   Reasoning: ${bot_action.reasoning}\n`);
     }
 
     private async displayFallbackAdvice(): Promise<void> {
-        console.log("\n💡 Fallback Advice:");
-        console.log("   Action: CHECK or FOLD");
-        console.log("   Reasoning: Could not get a confident read from the AI. Playing safe is advised.\n");
+        console.log("\n💡 Fallback Advice: CHECK or FOLD\n   Reasoning: Could not get a confident read from the AI.\n");
     }
 
     private async waitForUserExecution(): Promise<void> {
-        const response = await prompt({
+        const { action } = await prompt({
             type: 'select',
             name: 'action',
             message: 'Waiting for you to act. What next?',
-            choices: [
-                { name: 'acted', message: '✅ I have acted, continue monitoring.' },
-                { name: 'pause', message: '⏸️  Pause advisor.' },
-            ]
+            choices: ['✅ I have acted, continue monitoring.', '⏸️  Pause advisor.']
         });
-
-        if (response.action === 'pause') {
-            this.paused = true;
-        }
+        if (action.includes('Pause')) this.paused = true;
     }
 
     private async handlePauseMode(): Promise<void> {
-        const response = await prompt({
+        const { action } = await prompt({
             type: 'select',
             name: 'action',
             message: '⏸️  Advisor is paused. What would you like to do?',
-            choices: [
-                { name: 'resume', message: '▶️  Resume advisory' },
-                { name: 'quit', message: '🚪 Quit application' }
-            ]
+            choices: ['▶️  Resume advisory', '🚪 Quit application']
         });
-
-        if (response.action === 'resume') {
-            this.paused = false;
-        } else if (response.action === 'quit') {
-            process.exit(0);
-        }
+        if (action.includes('Resume')) this.paused = false;
+        else if (action.includes('Quit')) process.exit(0);
     }
 
-    private async promptUserConfirmation(message: string): Promise<boolean> {
-        const response: any = await prompt({ type: 'confirm', name: 'confirmed', message });
-        return response.confirmed;
+    private async promptUserConfirmation(message: string): Promise<void> {
+        const { confirmed } = await prompt({ type: 'confirm', name: 'confirmed', message });
+        if (!confirmed) process.exit(0);
     }
 
     private async queryBotAction(query: string, retries: number): Promise<BotAction> {
@@ -206,7 +172,6 @@ export class Bot {
             return await this.ai_service.getAction(query);
         } catch (e) {
             if (retries > 0) {
-                console.log(`AI query failed. Retrying... (${retries} left)`);
                 await sleep(1000);
                 return this.queryBotAction(query, retries - 1);
             }
