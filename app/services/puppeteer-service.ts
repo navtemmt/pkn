@@ -1,12 +1,32 @@
 import puppeteer from 'puppeteer';
-import { computeTimeout, sleep } from '../helpers/bot-helper.ts';
+import { computeTimeout, sleep, waitForEnter } from '../helpers/bot-helper.ts';
 import type { Response } from '../utils/error-handling-utils.ts';
 import fs from 'fs/promises';
-import { computeTimeout, sleep, waitForEnter } from '../helpers/bot-helper.ts';
 
+// --- File Paths for Session Data ---
 const cookiesPath = './cookies.json';
 const localStoragePath = './localStorage.json';
 const sessionStoragePath = './sessionStorage.json';
+
+// --- Interfaces for Structured Game Data ---
+export interface Player {
+  seat: number;
+  name: string;
+  stack: number;
+  bet: number;
+  isSelf: boolean;
+  isDealer: boolean;
+  isCurrentTurn: boolean;
+  isFolded: boolean;
+  isAllIn: boolean;
+  holeCards: string[];
+}
+
+export interface GameState {
+  players: Player[];
+  communityCards: string[];
+  pot: number;
+}
 
 export class PuppeteerService {
   private default_timeout: number;
@@ -15,35 +35,29 @@ export class PuppeteerService {
   private page!: puppeteer.Page;
   private observe_only: boolean = process.env.ADVISOR_OBSERVE === '1';
 
-  // --- Full Session Saving with Logging ---
+  // --- Session Management ---
   private async saveSession(): Promise<void> {
     try {
       const cookies = await this.page.cookies();
       await fs.writeFile(cookiesPath, JSON.stringify(cookies, null, 2));
       console.log(`INFO: Saved ${cookies.length} cookies.`);
-
       const localStorageData = await this.page.evaluate(() => JSON.stringify(window.localStorage));
       await fs.writeFile(localStoragePath, localStorageData);
       console.log('INFO: Saved localStorage.');
-
       const sessionStorageData = await this.page.evaluate(() => JSON.stringify(window.sessionStorage));
       await fs.writeFile(sessionStoragePath, sessionStorageData);
       console.log('INFO: Saved sessionStorage.');
-
       console.log('SUCCESS: Full session has been saved.');
     } catch (error) {
       console.error('ERROR: Failed to save session:', error);
     }
   }
 
-  // --- Full Session Loading with Logging ---
   private async loadSession(): Promise<void> {
     console.log('INFO: Attempting to load saved session...');
-    
     const cookies = JSON.parse(await fs.readFile(cookiesPath, 'utf8'));
     await this.page.setCookie(...cookies);
     console.log(`INFO: Loaded and set ${cookies.length} cookies.`);
-
     const localStorageData = await fs.readFile(localStoragePath, 'utf8');
     await this.page.evaluate(data => {
       for (const [key, value] of Object.entries(JSON.parse(data))) {
@@ -51,7 +65,6 @@ export class PuppeteerService {
       }
     }, localStorageData);
     console.log('INFO: Loaded and set localStorage.');
-
     const sessionStorageData = await fs.readFile(sessionStoragePath, 'utf8');
     await this.page.evaluate(data => {
       for (const [key, value] of Object.entries(JSON.parse(data))) {
@@ -59,72 +72,49 @@ export class PuppeteerService {
       }
     }, sessionStorageData);
     console.log('INFO: Loaded and set sessionStorage.');
-    
     console.log('SUCCESS: Full session has been loaded.');
   }
 
-  // --- Final Version: Robust Polling Function with CORRECT Selector ---
   private async isLoggedIn(): Promise<boolean> {
     const pokerFrame = this.pickPokerFrame(); 
-    
-    // This is the correct, definitive selector based on the HTML you provided.
     const loginCheckSelector = 'a[href="/sign_out"]';
-    
-    // Poll for the element to ensure it has time to render.
     for (let i = 0; i < 10; i++) {
       const logoutButton = await pokerFrame.$(loginCheckSelector);
-      if (logoutButton) {
-        return true; // Found it!
-      }
+      if (logoutButton) return true;
       await sleep(500); 
     }
-    
-    return false; // Did not find it after polling.
+    return false;
   }
-  
-  // --- Final Version: Orchestrator Using the Correct Verification ---
+
   private async manageLoginAndCookies(): Promise<void> {
     try {
       await this.page.goto('about:blank');
       await this.loadSession();
       await this.page.goto('https://www.pokernow.club/', { waitUntil: 'networkidle2' });
       console.log('INFO: Navigated to PokerNow with pre-loaded session.');
-  
       console.log('INFO: Verifying login status using correct selector and polling...');
-      
       const loggedIn = await this.isLoggedIn();
-  
       if (loggedIn) {
           console.log('SUCCESS: Login confirmed. Session is valid.');
       } else {
           console.log('WARNING: Login verification failed. Session is stale or page did not render in time.');
           throw new Error('Stale session');
       }
-      
     } catch (error) {
       console.log('WARNING: No valid session found. Falling back to manual login.');
       await this.page.goto('https://www.pokernow.club/', { waitUntil: 'networkidle2' });
-  
       await waitForEnter('ACTION REQUIRED: Please log in to PokerNow in the browser, then press Enter in this console...');
-  
       console.log('INFO: Resuming script and saving new session...');
       await this.saveSession();
     }
   }
-
-  
     
-  
-
-
-
-
-
   constructor(default_timeout: number, headless_flag: boolean) {
     this.default_timeout = default_timeout;
     this.headless_flag = headless_flag;
   }
 
+  // --- Core Methods ---
   async init(): Promise<void> {
     const ws = (process.env.BROWSER_WS_ENDPOINT || '').trim();
     const httpBase = (process.env.BROWSER_URL || '').trim();
@@ -139,12 +129,10 @@ export class PuppeteerService {
     } catch (_e) {
         this.browser = await puppeteer.launch({ defaultViewport: null, headless: this.headless_flag });
     }
-
     const pages = await this.browser.pages();
     const pokerPage = pages.find(p => (p.url() || '').includes('pokernow.club'));
     this.page = pokerPage ? pokerPage : (await this.browser.newPage());
     
-    // Set up diagnostic listeners
     this.page.on('pageerror', err => console.error('pageerror:', err));
     this.page.on('error', err => console.error('page crash/error:', err));
     this.page.on('console', msg => console.log(`[console:${msg.type()}] ${msg.text()}`));
@@ -153,7 +141,6 @@ export class PuppeteerService {
       console.warn('requestfailed:', req.url(), f ? f.errorText : undefined);
     });
 
-    // Set up request interception
     await this.page.setRequestInterception(true);
     this.page.on('request', (request) => {
       if (request.url().includes('google-analytics.com')) {
@@ -163,7 +150,6 @@ export class PuppeteerService {
       }
     });
 
-    // Handle login and session
     await this.manageLoginAndCookies();
   }
 
@@ -176,596 +162,73 @@ export class PuppeteerService {
     }
   }
 
-  async navigateToGame<D, E = Error>(game_id: string): Response<D, E> {
-    if (!game_id) return { code: 'error', error: new Error('Game id cannot be empty.') as E };
-    try {
-      await this.page.goto(`https://www.pokernow.club/games/${game_id}`, { waitUntil: 'networkidle2' });
-      await this.page.setViewport({ width: 1280, height: 800 });
-      return { code: 'success', data: null as D, msg: `Opened PokerNow game ${game_id}` };
-    } catch (e) {
-      return { code: 'error', error: new Error(`Failed to open game: ${(e as Error).message}`) as E };
-    }
+  async navigateToGame(game_id: string): Promise<void> {
+    if (!game_id) throw new Error('Game id cannot be empty.');
+    await this.page.goto(`https://www.pokernow.club/games/${game_id}`, { waitUntil: 'networkidle2' });
+    await this.page.setViewport({ width: 1280, height: 800 });
   }
 
-  // Helper: choose the frame that contains PokerNow content
+  // --- Consolidated Game State Scraping ---
   private pickPokerFrame(): puppeteer.Page | puppeteer.Frame {
     const frames = this.page.frames();
     const f = frames.find(fr => (fr.url() || '').includes('pokernow.club'));
     return f || this.page;
   }
 
-  // Optional: on-demand diagnostics for decision controls
-  async debugDecisionSnapshot(): Promise<void> {
-    const ctx: any = this.pickPokerFrame();
-    const diag = await ctx.$$eval(
-      '.game-decisions-ctn .action-buttons button, .game-decisions-ctn .action-buttons [role="button"]',
-      els =>
-        els.map(el => {
-          const b = el as HTMLButtonElement;
-          const aria = (el.getAttribute('aria-disabled') || '').toLowerCase();
-          const rect = el.getBoundingClientRect();
+  async getTableState(): Promise<GameState | null> {
+    const pokerFrame = this.pickPokerFrame();
+    try {
+      const gameState = await pokerFrame.evaluate(() => {
+        const parseValue = (text: string | null | undefined): number => {
+          if (!text) return 0;
+          const cleanedText = text.toLowerCase().trim();
+          const k = cleanedText.indexOf('k');
+          const m = cleanedText.indexOf('m');
+          const num = parseFloat(cleanedText.replace(/[^0-9.]/g, ''));
+          if (k > -1) return num * 1000;
+          if (m > -1) return num * 1000000;
+          return num;
+        };
+        const players: Player[] = Array.from(document.querySelectorAll('.table-player')).map(el => {
+          const seat = parseInt(el.getAttribute('data-seat') || '0', 10);
+          const name = (el.querySelector('.table-player-name') as HTMLElement)?.innerText || '';
+          const stackText = (el.querySelector('.table-player-stack') as HTMLElement)?.innerText;
+          const betText = (el.querySelector('.table-player-bet-value') as HTMLElement)?.innerText;
+          const holeCards = Array.from(el.querySelectorAll('.table-player-cards .card')).map(cardEl => {
+            const value = (cardEl.querySelector('.value') as HTMLElement)?.innerText || '';
+            const suit = (cardEl.querySelector('.sub-suit') as HTMLElement)?.innerText || '';
+            return `${value}${suit}`;
+          });
           return {
-            text: (el.textContent || '').trim(),
-            disabledProp: (b as any).disabled === true,
-            ariaDisabled: aria === 'true',
-            hasDisabledClass: el.classList.contains('disabled'),
-            size: { w: rect.width, h: rect.height }
+            seat,
+            name,
+            stack: parseValue(stackText),
+            bet: parseValue(betText),
+            isSelf: el.classList.contains('you-player'),
+            isDealer: !!el.querySelector('.table-dealer-button'),
+            isCurrentTurn: !!el.querySelector('.current-player-indicator'),
+            isFolded: el.classList.contains('folded'),
+            isAllIn: el.classList.contains('all-in'),
+            holeCards: holeCards.filter(c => c.length === 2)
           };
-        })
-    );
-    console.log('Decision controls snapshot:', diag);
-  }
-
-  // Wait for some form of game info to exist (CSS first, fallback to text pattern)
-  async waitForGameInfo<D, E = Error>(): Response<D, E> {
-    const ctx: any = this.pickPokerFrame();
-    try {
-      const candidates = [
-        '.game-infos .blind-value-ctn .blind-value',
-        '.game-infos .blind-value',
-        '[class*="game"][class*="info"]'
-      ];
-      let found = false;
-      for (const sel of candidates) {
-        try {
-          await ctx.waitForSelector(sel, { timeout: this.default_timeout * 10, visible: true });
-          found = true;
-          break;
-        } catch {}
-      }
-      if (!found) {
-        await ctx.waitForFunction(() => {
-          const rx = /(\d+(?:\.\d+)?)\s*\/\s*(\d+(?:\.\d+)?)/;
-          const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
-          let node: Node | null;
-          while ((node = walker.nextNode())) {
-            const t = (node.textContent || '').replace(/\s+/g, ' ').trim();
-            if (rx.test(t)) return true;
-          }
-          return false;
-        }, { timeout: this.default_timeout * 15 });
-      }
-      return { code: 'success', data: null as D, msg: 'Game info is present.' };
-    } catch {
-      return { code: 'error', error: new Error('Failed to wait for game information.') as E };
-    }
-  }
-
-  // Extract the game info text (CSS first, fallback to text scan)
-  async getGameInfo<D, E = Error>(): Response<D, E> {
-    const ctx: any = this.pickPokerFrame();
-    try {
-      const selectors = [
-        '.game-infos .blind-value-ctn .blind-value',
-        '.game-infos .blind-value',
-        '.game-infos'
-      ];
-      let text = '';
-      for (const sel of selectors) {
-        const handle = await ctx.$(sel);
-        if (handle) {
-          text = (await ctx.$eval(sel, (el: Element) => (el.textContent || '').trim())).trim();
-          if (text) break;
-        }
-      }
-      if (!text) {
-        text = await ctx.evaluate(() => {
-          const rx = /([A-Z]{1,3}\s*~\s*)?([£$€]?\s*\d+(?:\.\d+)?)[^\S\r\n]*\/[^\S\r\n]*([£$€]?\s*\d+(?:\.\d+)?)/i;
-          const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
-          let node: Node | null;
-          while ((node = walker.nextNode())) {
-            const t = (node.textContent || '').replace(/\s+/g, ' ').trim();
-            if (rx.test(t)) return t;
-          }
-          return '';
+        }).filter(p => p.name);
+        const communityCards = Array.from(document.querySelectorAll('.table-community-cards .card')).map(cardEl => {
+          const value = (cardEl.querySelector('.value') as HTMLElement)?.innerText || '';
+          const suit = (cardEl.querySelector('.sub-suit') as HTMLElement)?.innerText || '';
+          return `${value}${suit}`;
         });
-      }
-      if (!text) throw new Error('No blinds text found');
-      return { code: 'success', data: text as D, msg: 'Successfully grabbed the game info.' };
-    } catch {
-      return { code: 'error', error: new Error('Could not get game info.') as E };
-    }
-  }
-
-  // Parse raw game info text into structured values
-  convertGameInfo(raw: string): Response<any, Error> {
-    try {
-      if (!raw || typeof raw !== 'string') throw new Error('Empty game info text');
-      const text = raw.replace(/\s+/g, ' ').trim();
-      const rx = /([A-Za-z]{1,3}\s*~\s*)?([£$€]?\s*\d+(?:\.\d+)?)[ ]*\/[ ]*([£$€]?\s*\d+(?:\.\d+)?)(?:[ ]*ante[ ]*([£$€]?\s*\d+(?:\.\d+)?))?/i;
-      const m = text.match(rx);
-      if (!m) throw new Error('Unrecognized blinds format');
-      const num = (s: string) => parseFloat(s.replace(/[^\d.]/g, ''));
-      const small_blind = num(m[2]);
-      const big_blind = num(m[3]);
-      const ante = m[4] ? num(m[4]) : 0;
-      const curFrom = (s: string) => {
-        const c = s.match(/[£$€]/);
-        return c ? c[0] : '';
-      };
-      const currency = curFrom(m[2]) || curFrom(m[3]);
-      return { code: 'success', data: { small_blind, big_blind, ante, currency } as any, msg: 'Parsed game info.' };
-    } catch {
-      return { code: 'error', error: new Error('Failed to parse game info.') as Error };
-    }
-  }
-
-  // Advisor-only flow: skip joining if already seated or in observe-only mode
-  // helper: always operate in the PokerNow frame
-  private getPokerFrame(): puppeteer.Frame | puppeteer.Page {
-    const f = this.pickPokerFrame?.() ?? this.page.frames().find(fr => fr.url().includes('pokernow'));
-    return (f as puppeteer.Frame) || this.page;
-  }
-  
-  // helper: robust clickability check inside the frame
-  private async isClickable(ctx: puppeteer.Frame | puppeteer.Page, el: puppeteer.ElementHandle<Element>): Promise<boolean> {
-    const [disabled, ariaDisabled, hasDisabledClass, visible] = await Promise.all([
-      ctx.evaluate(e => (e as HTMLButtonElement).disabled === true, el),
-      ctx.evaluate(e => e.getAttribute('aria-disabled') === 'true', el),
-      ctx.evaluate(e => (e as HTMLElement).classList?.contains('disabled') === true, el),
-      (el as any).isIntersectingViewport?.() ?? ctx.evaluate(e => {
-        const r = (e as HTMLElement).getBoundingClientRect();
-        return !!(r.width && r.height);
-      }, el)
-    ]);
-    return !disabled && !ariaDisabled && !hasDisabledClass && !!visible;
-  }
-  
-  async sendEnterTableRequest<D, E = Error>(name: string, stack_size: number): Response<D, E> {
-    const ctx = this.getPokerFrame();
-    try {
-      // Already seated or observe-only short-circuits
-      if (await (ctx as any).$('.you-player')) {
-        return { code: 'success', data: null as D, msg: 'Already seated; skipping join.' };
-      }
-      if (this.observe_only) {
-        return { code: 'success', data: null as D, msg: 'Observation mode enabled; skipping join.' };
-      }
-      if (name.length < 2 || name.length > 14) {
-        return { code: 'error', error: new Error('Player name must be betwen 2 and 14 characters long.') as E };
-      }
-  
-      // Wait for any seat button in the frame, then pick a truly actionable one
-      await (ctx as any).waitForSelector('.table-player-seat-button', { timeout: this.default_timeout * 4, visible: true });
-      const seatButtons = await (ctx as any).$$('.table-player-seat-button');
-  
-      let clicked = false;
-      for (const btn of seatButtons) {
-        if (await this.isClickable(ctx, btn)) {
-          await btn.click();
-          clicked = true;
-          break;
-        }
-      }
-      if (!clicked) throw new Error('No clickable seat found');
-  
-      // Allow modal to render
-      await (ctx as any).waitForTimeout?.(500);
-  
-      // Find the join form in the same frame
-      let form =
-        (await (ctx as any).$('.selected form')) ||
-        (await (ctx as any).$('form:has(button[type="submit"])')) ||
-        (await (ctx as any).$('form'));
-  
-      if (!form) {
-        await (ctx as any).waitForSelector('input[placeholder], input[name], input[type="text"], input[type="number"]', {
-          visible: true,
-          timeout: Math.max(15000, this.default_timeout * 10)
-        });
-      }
-  
-      // Name input (prefer ARIA role/name; fall back to generic inputs within form/frame)
-      const nameInput =
-        (await (ctx as any).$('::-p-aria(Name)[role="textbox"]')) ||
-        (form && await form.$('input[placeholder*="name" i]')) ||
-        (form && await form.$('input[name="name"]')) ||
-        (form && await form.$('input[type="text"]')) ||
-        (await (ctx as any).waitForSelector('input[placeholder], input[name], input[type="text"]', {
-          visible: true,
-          timeout: this.default_timeout
-        }));
-      if (!nameInput) throw new Error('Name input not found');
-  
-      await (nameInput as any).click({ clickCount: 3 });
-      if ((nameInput as any).type) {
-        await (nameInput as any).type(name, { delay: 5 });
-      } else {
-        await this.page.keyboard.type(name, { delay: 5 });
-      }
-  
-      // Stack input (prefer ARIA spinbutton; fall back to numeric/generic)
-      const stackInput =
-        (await (ctx as any).$('::-p-aria(Stack)[role="spinbutton"]')) ||
-        (form && await form.$('input[placeholder*="stack" i]')) ||
-        (form && await form.$('input[name="stack"]')) ||
-        (form && await form.$('input[type="number"]')) ||
-        (await (ctx as any).waitForSelector('input[type="number"], input[name], input[placeholder]', {
-          visible: true,
-          timeout: this.default_timeout
-        }));
-      if (!stackInput) throw new Error('Stack input not found');
-  
-      await (stackInput as any).click({ clickCount: 3 });
-      if ((stackInput as any).type) {
-        await (stackInput as any).type(String(stack_size), { delay: 5 });
-      } else {
-        await this.page.keyboard.type(String(stack_size), { delay: 5 });
-      }
-  
-      // Join/submit button with ARIA fallback
-      const joinBtn =
-        (form && await form.$('button[type="submit"]')) ||
-        (await (ctx as any).$('::-p-aria(Join)[role="button"]')) ||
-        (form && await form.$('button'));
-      if (!joinBtn) throw new Error('Join/submit button not found');
-  
-      if (!(await this.isClickable(ctx, joinBtn))) {
-        throw new Error('Join button is not actionable');
-      }
-      await (joinBtn as any).click();
-  
-    } catch (err) {
-      return {
-        code: 'error',
-        error: new Error((err as Error).message || 'Could not enter a seat/join form') as E
-      };
-    }
-  
-    // Handle post-join alert (same frame)
-    try {
-      await (ctx as any).waitForSelector('.alert-1-buttons > button', { timeout: this.default_timeout });
-      await (ctx as any).$eval('.alert-1-buttons > button', (button: any) => button.click());
-    } catch {
-      let message = 'Table ingress unsuccessful.';
-      if (await (ctx as any).$('.selected form .error-message')) {
-        message = 'Player name must be unique to game.';
-      }
-      const cancelBtn = await (ctx as any).$(".selected > button, button:has-text('Cancel')");
-      if (cancelBtn) await (cancelBtn as any).click();
-      return { code: 'error', error: new Error(message) as E };
-    }
-  
-    return { code: 'success', data: null as D, msg: 'Table ingress request successfully sent.' };
-  }
-  
-  async waitForTableEntry<D, E = Error>(): Response<D, E> {
-    const ctx = this.getPokerFrame();
-    try {
-      await (ctx as any).waitForSelector('.you-player', { timeout: this.default_timeout * 120 });
-    } catch (_err) {
-      return { code: 'error', error: new Error('Table ingress request not accepted by host.') as E };
-    }
-    return { code: 'success', data: null as D, msg: 'Successfully entered table.' };
-  }
-  
-  async waitForNextHand<D, E = Error>(num_players: number, max_turn_length: number): Response<D, E> {
-    const ctx = this.getPokerFrame();
-    try {
-      await (ctx as any).waitForSelector(['.you-player > .waiting', '.you-player > .waiting-next-hand'].join(','), {
-        timeout: this.default_timeout
+        const potText = (document.querySelector('.table-pot-size .main-value') as HTMLElement)?.innerText;
+        const pot = parseValue(potText);
+        return {
+          players,
+          communityCards: communityCards.filter(c => c.length === 2),
+          pot
+        };
       });
-    } catch (_err) {
-      return { code: 'error', error: new Error('Player is not in waiting state.') as E };
+      return gameState;
+    } catch (error) {
+      console.error('Error capturing table state:', error);
+      return null;
     }
-    try {
-      await (ctx as any).waitForSelector(['.you-player > .waiting', '.you-player > .waiting-next-hand'].join(','), {
-        hidden: true,
-        timeout: computeTimeout(num_players, max_turn_length, 4) * 5 + this.default_timeout
-      });
-    } catch (_err) {
-      return { code: 'error', error: new Error('Player is not in waiting state.') as E };
-    }
-    return { code: 'success', data: null as D, msg: 'Waited for next hand to start.' };
-  }
-
-
-  async getNumPlayers<D, E = Error>(): Response<D, E> {
-    try {
-      const ctx: any = this.pickPokerFrame(); // ensure we query the correct frame
-      await ctx.waitForSelector('.table-player', { timeout: this.default_timeout });
-  
-      // Optional diagnostics (runs after ctx is defined)
-      const totals = await ctx.evaluate(() => ({
-        seats: document.querySelectorAll('.table-player').length,
-        seatButtons: document.querySelectorAll('.table-player-seat-button').length
-      }));
-      console.log('Seats:', totals.seats, 'Seat buttons:', totals.seatButtons, 'Seated =', totals.seats - totals.seatButtons);
-  
-      // Count occupied seats: a seat without a seat button is taken
-      const seated = await ctx.$$eval('.table-player', (seats: Element[]) =>
-        seats.filter(seat => !seat.querySelector('.table-player-seat-button')).length
-      );
-  
-      return {
-        code: 'success',
-        data: seated as D,
-        msg: `Successfully got number of players in table: ${seated}`
-      };
-    } catch (_err) {
-      return {
-        code: 'error',
-        error: new Error('Failed to compute number of players in table.') as E
-      };
-    }
-  }
-
-
-
-  // Frame-aware, robust turn detection
-  async waitForBotTurnOrWinner<D, E = Error>(num_players: number, max_turn_length: number): Response<D, E> {
-    const timeout = 600000;
-    const ctx: any = this.pickPokerFrame();
-
-    try {
-      await ctx.waitForFunction(() => {
-        const btns = Array.from(
-          document.querySelectorAll(
-            '.game-decisions-ctn .action-buttons button, .game-decisions-ctn .action-buttons [role="button"]'
-          )
-        ) as HTMLElement[];
-        return btns.some(b => {
-          const ariaDis = (b.getAttribute('aria-disabled') || '').toLowerCase() === 'true';
-          const hasDisabledClass = b.classList.contains('disabled');
-          const isDisabledProp = (b as HTMLButtonElement).disabled === true;
-          const rect = b.getBoundingClientRect();
-          const visible = !!(rect.width && rect.height);
-          return visible && !isDisabledProp && !ariaDis && !hasDisabledClass;
-        });
-      }, { timeout });
-      return { code: 'success', data: 'action' as D, msg: 'Detected actionable decision control.' };
-    } catch {}
-
-    try {
-      await ctx.waitForSelector('.table-player.winner', { timeout });
-      return { code: 'success', data: 'table-player winner' as D, msg: 'Detected winner element.' };
-    } catch (_err) {
-      return { code: 'error', error: new Error('No action or winner detected in time.') as E };
-    }
-  }
-
-  async waitForBotTurnEnd<D, E = Error>(): Response<D, E> {
-    try {
-      await this.page.waitForSelector('.action-signal', { hidden: true, timeout: this.default_timeout * 15 });
-    } catch (_err) {
-      return {
-        code: 'error',
-        error: new Error("Failed to wait for bot's turn to end.") as E
-      };
-    }
-    return {
-      code: 'success',
-      data: null as D,
-      msg: "Successfully waited for bot's turn to end."
-    };
-  }
-
-  async getPotSize<D, E = Error>(): Response<D, E> {
-    try {
-      await this.page.waitForSelector('.table > .table-pot-size > .main-value');
-      const pot_size_str = await this.page.$eval('.table > .table-pot-size > .main-value', (p: any) => p.textContent);
-      return {
-        code: 'success',
-        data: pot_size_str as D,
-        msg: 'Successfully retrieved table pot size.'
-      };
-    } catch (_err) {
-      return {
-        code: 'error',
-        error: new Error('Failed to retrieve table pot size.') as E
-      };
-    }
-  }
-
-  async getHand<D, E = Error>(): Response<D, E> {
-    try {
-      const cards_div = await this.page.$$('.you-player > .table-player-cards > div');
-      let cards: string[] = [];
-      for (const card_div of cards_div) {
-        const card_value = await card_div.$eval('.value', (span: any) => span.textContent);
-        const sub_suit_letter = await card_div.$eval('.sub-suit', (span: any) => span.textContent);
-        if (card_value && sub_suit_letter) {
-          cards.push(card_value + sub_suit_letter);
-        } else {
-          throw 'Invalid card.';
-        }
-      }
-      return {
-        code: 'success',
-        data: cards as D,
-        msg: "Successfully retrieved player's hand."
-      };
-    } catch (_err) {
-      return {
-        code: 'error',
-        error: new Error("Failed to retrieve player's hand.") as E
-      };
-    }
-  }
-
-  async getStackSize<D, E = Error>(): Response<D, E> {
-    try {
-      await this.page.waitForSelector('.you-player > .table-player-infos-ctn > div > .table-player-stack');
-      const stack_size_str = await this.page.$eval(
-        '.you-player > .table-player-infos-ctn > div > .table-player-stack',
-        (p: any) => p.textContent
-      );
-      return {
-        code: 'success',
-        data: stack_size_str as D,
-        msg: "Successfully retrieved bot's stack size."
-      };
-    } catch (_err) {
-      return {
-        code: 'error',
-        error: new Error("Failed to retrieve bot's stack size.") as E
-      };
-    }
-  }
-
-  async waitForCallOption<D, E = Error>(): Response<D, E> {
-    try {
-      await this.page.waitForSelector('.game-decisions-ctn > .action-buttons > .call', { timeout: this.default_timeout });
-      const is_disabled = await this.page.$eval(
-        '.game-decisions-ctn > .action-buttons > .call',
-        (button: any) => button.disabled
-      );
-      if (is_disabled) throw new Error('Call option is disabled.');
-    } catch (_err) {
-      return { code: 'error', error: new Error('No option to call available.') as E };
-    }
-    return { code: 'success', data: null as D, msg: 'Successfully waited for call option.' };
-  }
-
-  async call<D, E = Error>(): Response<D, E> {
-    try {
-      await this.page.$eval('.game-decisions-ctn > .action-buttons > .call', (button: any) => button.click());
-    } catch (_err) {
-      return { code: 'error', error: new Error('Failed to execute call action.') as E };
-    }
-    return { code: 'success', data: null as D, msg: 'Successfully executed call action.' };
-  }
-
-  async waitForFoldOption<D, E = Error>(): Response<D, E> {
-    try {
-      await this.page.waitForSelector('.game-decisions-ctn > .action-buttons > .fold', { timeout: this.default_timeout });
-      const is_disabled = await this.page.$eval(
-        '.game-decisions-ctn > .action-buttons > .fold',
-        (button: any) => button.disabled
-      );
-      if (is_disabled) throw new Error('Fold option is disabled.');
-    } catch (_err) {
-      return { code: 'error', error: new Error('No option to fold available.') as E };
-    }
-    return { code: 'success', data: null as D, msg: 'Successfully waited for fold option.' };
-  }
-
-  async fold<D, E = Error>(): Response<D, E> {
-    try {
-      await this.page.waitForSelector('.game-decisions-ctn > .action-buttons > .fold', { timeout: this.default_timeout });
-      await this.page.$eval('.game-decisions-ctn > .action-buttons > .fold', (button: any) => button.click());
-    } catch (_err) {
-      return { code: 'error', error: new Error('No option to fold available.') as E };
-    }
-    return { code: 'success', data: null as D, msg: 'Successfully executed fold action.' };
-  }
-
-  async cancelUnnecessaryFold<D, E = Error>(): Response<D, E> {
-    const fold_alert_text =
-      'Are you sure that you want do an unnecessary fold?Do not show this again in this session? ';
-    try {
-      await this.page.waitForSelector('.alert-1', { timeout: this.default_timeout });
-      const text = await this.page.$eval('.alert-1 > .content', (div: any) => div.textContent);
-      if (text === fold_alert_text) {
-        await this.page.$eval('.alert-1 > .alert-1-buttons > .button-1.red', (button: any) => button.click());
-      }
-    } catch (_err) {
-      return { code: 'error', error: new Error('No option to cancel unnecessary fold available.') as E };
-    }
-    return { code: 'success', data: null as D, msg: 'Successfully cancelled unnecessary fold.' };
-  }
-
-  async waitForCheckOption<D, E = Error>(): Response<D, E> {
-    try {
-      await this.page.waitForSelector('.game-decisions-ctn > .action-buttons > .check', { timeout: this.default_timeout });
-      const is_disabled = await this.page.$eval(
-        '.game-decisions-ctn > .action-buttons > .check',
-        (button: any) => button.disabled
-      );
-      if (is_disabled) throw new Error('Check option is disabled.');
-    } catch (_err) {
-      return { code: 'error', error: new Error('No option to check available.') as E };
-    }
-    return { code: 'success', data: null as D, msg: 'Successfully waited for check option.' };
-  }
-
-  async check<D, E = Error>(): Response<D, E> {
-    try {
-      await this.page.waitForSelector('.game-decisions-ctn > .action-buttons > .check', { timeout: this.default_timeout });
-      await this.page.$eval('.game-decisions-ctn > .action-buttons > .check', (button: any) => button.click());
-    } catch (_err) {
-      return { code: 'error', error: new Error('No option to check available.') as E };
-    }
-    return { code: 'success', data: null as D, msg: 'Successfully executed check action.' };
-  }
-
-  async waitForBetOption<D, E = Error>(): Response<D, E> {
-    try {
-      await this.page.waitForSelector('.game-decisions-ctn > .action-buttons > .raise', { timeout: this.default_timeout });
-      const is_disabled = await this.page.$eval(
-        '.game-decisions-ctn > .action-buttons > .raise',
-        (button: any) => button.disabled
-      );
-      if (is_disabled) throw new Error('Bet or raise option is disabled.');
-    } catch (_err) {
-      return { code: 'error', error: new Error('No option to bet or raise available.') as E };
-    }
-    return { code: 'success', data: null as D, msg: 'Successfully waited for bet or raise option.' };
-  }
-
-  async betOrRaise<D, E = Error>(bet_amount: number): Response<D, E> {
-    try {
-      const bet_action = await this.page.$eval('.game-decisions-ctn > .action-buttons > .raise', (button: any) => button.textContent);
-      await this.page.$eval('.game-decisions-ctn > .action-buttons > .raise', (button: any) => button.click());
-      if (bet_action === 'Raise') {
-        const res = await this.getCurrentBet();
-        if (res.code === 'success') {
-          const current_bet = res.data as number;
-          bet_amount += current_bet;
-        }
-      }
-      await this.page.waitForSelector('.game-decisions-ctn > form > .raise-bet-value > div > input', {
-        timeout: this.default_timeout
-      });
-      await this.page.focus('.game-decisions-ctn > form > .raise-bet-value > div > input');
-      await sleep(this.default_timeout);
-      await this.page.keyboard.type(bet_amount.toString(), { delay: 200 });
-      await this.page.waitForSelector('.game-decisions-ctn > form > .action-buttons > .bet', {
-        timeout: this.default_timeout
-      });
-      await this.page.$eval('.game-decisions-ctn > form > .action-buttons > .bet', (input: any) => input.click());
-    } catch (_err) {
-      return { code: 'error', error: new Error(`Failed to bet with amount ${bet_amount}.`) as E };
-    }
-    return { code: 'success', data: null as D, msg: `Successfully executed bet action with amount ${bet_amount}.` };
-  }
-
-  async getCurrentBet<D, E = Error>(): Response<D, E> {
-    try {
-      const el = await this.page.waitForSelector('.you-player > .table-player-bet-value', { timeout: this.default_timeout });
-      const current_bet = await this.page.evaluate((el: any) => (isNaN(el.textContent) ? '0' : el.textContent), el);
-      return { code: 'success', data: parseFloat(current_bet) as D, msg: `Successfully retrieved current bet amount: ${current_bet}` };
-    } catch (_err) {
-      return { code: 'error', error: new Error('No existing bet amount found.') as E };
-    }
-  }
-
-  async waitForHandEnd<D, E = Error>(): Response<D, E> {
-    try {
-      await this.page.waitForSelector('.table-player.winner', { hidden: true, timeout: this.default_timeout * 10 });
-    } catch (_err) {
-      return { code: 'error', error: new Error('Failed to wait for hand to finish.') as E };
-    }
-    return { code: 'success', data: null as D, msg: 'Waited for hand to finish.' };
   }
 }
