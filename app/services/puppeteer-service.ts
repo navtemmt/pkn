@@ -50,32 +50,19 @@ export class PuppeteerService {
       } else if (httpBase && (httpBase.startsWith('http://') || httpBase.startsWith('https://'))) {
         this.browser = await puppeteer.connect({ browserURL: httpBase });
       } else {
-        throw new Error('No connect URL provided');
-      }
-    } catch (_e) {
-      if (httpBase) {
-        try {
-          const base = httpBase.replace(/\/$/, '');
-          const res = await fetch(base + '/json/version');
-          const data = await res.json();
-          const refreshed = data && data.webSocketDebuggerUrl;
-          if (!refreshed) throw new Error('No webSocketDebuggerUrl in /json/version');
-          this.browser = await puppeteer.connect({ browserWSEndpoint: refreshed });
-        } catch (_e2) {
-          this.browser = await puppeteer.launch({ defaultViewport: null, headless: this.headless_flag });
-        }
-      } else {
         this.browser = await puppeteer.launch({ defaultViewport: null, headless: this.headless_flag });
       }
+    } catch (_e) {
+        this.browser = await puppeteer.launch({ defaultViewport: null, headless: this.headless_flag });
     }
 
     const pages = await this.browser.pages();
     const pokerPage = pages.find(p => (p.url() || '').includes('pokernow.club'));
     this.page = pokerPage ? pokerPage : (await this.browser.newPage());
 
-    // === ALL EVENT LISTENERS AND SETUP GO INSIDE init() ===
+    // === ALL SETUP LOGIC GOES HERE, INSIDE init() ===
 
-    // 1. Set up diagnostic listeners
+    // 1. Set up diagnostic listeners (ESSENTIAL)
     this.page.on('pageerror', err => console.error('pageerror:', err));
     this.page.on('error', err => console.error('page crash/error:', err));
     this.page.on('console', msg => console.log(`[console:${msg.type()}] ${msg.text()}`));
@@ -84,7 +71,7 @@ export class PuppeteerService {
       console.warn('requestfailed:', req.url(), f ? f.errorText : undefined);
     });
 
-    // 2. Set up request interception
+    // 2. Set up request interception (RECOMMENDED)
     await this.page.setRequestInterception(true);
     this.page.on('request', (request) => {
       if (request.url().includes('google-analytics.com')) {
@@ -94,7 +81,7 @@ export class PuppeteerService {
       }
     });
 
-    // 3. Handle login and cookies
+    // 3. Handle login and session (CRITICAL)
     await this.manageLoginAndCookies();
   }
 
