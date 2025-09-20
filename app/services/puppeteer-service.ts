@@ -64,6 +64,7 @@ export class PuppeteerService {
 
   // --- Main Login/Session Orchestrator with Logging ---
   // --- Main Login/Session Orchestrator with Login Verification ---
+// --- Main Login/Session Orchestrator with Manual Confirmation ---
 private async manageLoginAndCookies(): Promise<void> {
   try {
     await this.page.goto('about:blank');
@@ -71,30 +72,30 @@ private async manageLoginAndCookies(): Promise<void> {
     await this.page.goto('https://www.pokernow.club/', { waitUntil: 'networkidle2' });
     console.log('INFO: Navigated to PokerNow with pre-loaded session.');
 
-    // --- NEW: VERIFY THE LOGIN ---
-    // We check for an element that ONLY exists when you are logged in.
-    // A good candidate is the user avatar or a "logout" button.
-    // This selector might need to be adjusted based on PokerNow's actual HTML.
-    const loginCheckSelector = '.user-avatar-or-logout-button-selector'; // <-- IMPORTANT: Replace with a real selector
+    // Verify the login by checking for your avatar
+    const loginCheckSelector = '.user-avatar'; // The selector for the user avatar when logged in
     try {
-        await this.page.waitForSelector(loginCheckSelector, { timeout: 5000 }); // Wait 5 seconds
+        await this.page.waitForSelector(loginCheckSelector, { timeout: 5000 });
         console.log('SUCCESS: Login confirmed via session data.');
     } catch (e) {
         console.log('WARNING: Session data is stale or invalid. Forcing re-login.');
-        throw new Error('Stale session'); // Throw an error to jump to the catch block
+        throw new Error('Stale session');
     }
     
   } catch (error) {
-    // This block now catches both "no session file" and "stale session" errors
     console.log('WARNING: No valid session found. Falling back to manual login.');
     await this.page.goto('https://www.pokernow.club/', { waitUntil: 'networkidle2' });
 
-    console.log('ACTION REQUIRED: Please log in to PokerNow in the browser. The script will wait for up to 3 minutes.');
-    await this.page.waitForNavigation({ timeout: 180000 });
+    // --- THE KEY CHANGE IS HERE ---
+    // Instead of waiting for navigation, we wait for you to press Enter.
+    await waitForEnter('ACTION REQUIRED: Please log in to PokerNow in the browser, then press Enter in this console...');
 
+    // Now that you've logged in and pressed Enter, we save the valid session.
+    console.log('INFO: Resuming script and saving the new session...');
     await this.saveSession();
   }
 }
+
 
 
   constructor(default_timeout: number, headless_flag: boolean) {
