@@ -63,34 +63,26 @@ export class PuppeteerService {
     console.log('SUCCESS: Full session has been loaded.');
   }
 
-  // --- Main Login/Session Orchestrator with Logging ---
-  // --- Main Login/Session Orchestrator with Login Verification ---
-// --- Main Login/Session Orchestrator with Manual Confirmation ---
-  // --- Main Login/Session Orchestrator with a REAL Login Check ---
-  // --- Main Login/Session Orchestrator with Correct Login Verification ---
-  // --- Final Version: Main Login/Session Orchestrator with Robust Verification ---
-  // --- Final Version: Main Login/Session Orchestrator with Patient Verification ---
-  // --- NEW: Robust Polling Function for Login Verification ---
+  // --- Final Version: Robust Polling Function with CORRECT Selector ---
   private async isLoggedIn(): Promise<boolean> {
-    const loginCheckSelector = 'a[href*="/sessions/destroy"]';
+    const pokerFrame = this.pickPokerFrame(); 
     
-    // Poll the page 10 times over 5 seconds.
+    // This is the correct, definitive selector based on the HTML you provided.
+    const loginCheckSelector = 'a[href="/sign_out"]';
+    
+    // Poll for the element to ensure it has time to render.
     for (let i = 0; i < 10; i++) {
-      // Directly check if the element exists.
-      const logoutButton = await this.page.$(loginCheckSelector);
+      const logoutButton = await pokerFrame.$(loginCheckSelector);
       if (logoutButton) {
-        return true; // Found it! The user is logged in.
+        return true; // Found it!
       }
-      // If not found, wait 500ms before trying again.
       await sleep(500); 
     }
     
-    // If the loop completes without finding the button, the user is not logged in.
-    return false;
+    return false; // Did not find it after polling.
   }
-
   
-  // --- Final Version: Using a Polling Function for Verification ---
+  // --- Final Version: Orchestrator Using the Correct Verification ---
   private async manageLoginAndCookies(): Promise<void> {
     try {
       await this.page.goto('about:blank');
@@ -98,29 +90,28 @@ export class PuppeteerService {
       await this.page.goto('https://www.pokernow.club/', { waitUntil: 'networkidle2' });
       console.log('INFO: Navigated to PokerNow with pre-loaded session.');
   
-      console.log('INFO: Verifying login status using aggressive polling...');
+      console.log('INFO: Verifying login status using correct selector and polling...');
       
-      // Call our new, robust polling function.
       const loggedIn = await this.isLoggedIn();
   
       if (loggedIn) {
           console.log('SUCCESS: Login confirmed. Session is valid.');
       } else {
-          console.log('WARNING: Login verification failed after polling. Session is stale.');
-          throw new Error('Stale session'); // Jump to the catch block for manual login.
+          console.log('WARNING: Login verification failed. Session is stale or page did not render in time.');
+          throw new Error('Stale session');
       }
       
     } catch (error) {
       console.log('WARNING: No valid session found. Falling back to manual login.');
       await this.page.goto('https://www.pokernow.club/', { waitUntil: 'networkidle2' });
   
-      // Wait for you to manually log in and press Enter.
       await waitForEnter('ACTION REQUIRED: Please log in to PokerNow in the browser, then press Enter in this console...');
   
       console.log('INFO: Resuming script and saving new session...');
       await this.saveSession();
     }
   }
+
   
     
   
