@@ -4,14 +4,13 @@
   "description": "Modified pokernow-gpt for manual ChatGPT workflow",
   "license": "ISC",
 
-  "main": "dist/app/index.js",
+  "type": "module",
+  "main": "app/index.ts",
 
   "scripts": {
+    "start": "node --loader @esbuild-kit/esm-loader app/index.ts",
+    "start:dev": "node --loader @esbuild-kit/esm-loader app/index.ts --no-headless",
     "build": "tsc",
-    "postinstall": "npm run build",
-    "start": "node dist/app/index.js",
-    "start:dev": "node dist/app/index.js --no-headless",
-    "start:esm": "node --loader @esbuild-kit/esm-loader app/index.ts --no-headless",
     "test": "mocha -r dotenv/config --timeout 5000"
   },
 
