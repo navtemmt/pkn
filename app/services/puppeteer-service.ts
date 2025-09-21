@@ -109,6 +109,7 @@ export class PuppeteerService {
   }
 
 
+
   
     // Optional: set default timeouts
     this.page.setDefaultTimeout(this.default_timeout);
