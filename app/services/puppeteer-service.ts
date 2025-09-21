@@ -66,6 +66,52 @@ export class PuppeteerService {
     const pages = await this.browser.pages();
     this.page = pages.length > 0 ? pages[0] : await this.browser.newPage();
   
+    // Ensure future navigations have a safe __name in the page context.
+    await this.page.evaluateOnNewDocument(() => {
+      // @ts-ignore
+      (window as any).__name = (fn: any, _n: string) => fn;
+    });
+  
+    // If the page already has content (reused page), inject __name now for current doc + frames.
+    if (this.page.url() !== 'about:blank') {
+      try {
+        await this.page.evaluate(() => {
+          // @ts-ignore
+          (window as any).__name = (fn: any, _n: string) => fn;
+        });
+        const frames = this.page.frames();
+        await Promise.all(
+          frames.map((f) =>
+            f.evaluate(() => {
+              // @ts-ignore
+              (window as any).__name = (fn: any, _n: string) => fn;
+            })
+          )
+        );
+      } catch (err) {
+        console.warn('WARN: Failed to inject __name into existing document/frames.', err);
+      }
+    }
+  
+    // Optional interception hook; keep commented until needed.
+    // await this.page.setRequestInterception(true);
+  
+    this.page.setDefaultTimeout(this.default_timeout);
+    this.page.setDefaultNavigationTimeout(this.default_timeout);
+  
+    this.page.on('pageerror', (err) => console.error('pageerror:', err));
+    this.page.on('console', (msg) => {
+      const t = msg.type();
+      if (t === 'error' || t === 'warn') {
+        console.log(`[console:${t}] ${msg.text()}`);
+      }
+    });
+  }
+
+  
+    const pages = await this.browser.pages();
+    this.page = pages.length > 0 ? pages[0] : await this.browser.newPage();
+  
     // Pre-seed __name for all future navigations (runs before any page scripts)
     await this.page.evaluateOnNewDocument(() => {
       // @ts-ignore
