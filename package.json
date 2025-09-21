@@ -8,11 +8,11 @@
 
   "scripts": {
     "build": "tsc",
+    "postinstall": "npm run build",
     "start": "node dist/app/index.js",
     "start:dev": "node dist/app/index.js --no-headless",
-    "test": "mocha -r dotenv/config --timeout 5000",
-
-    "start:esm": "node --loader @esbuild-kit/esm-loader app/index.ts --no-headless"
+    "start:esm": "node --loader @esbuild-kit/esm-loader app/index.ts --no-headless",
+    "test": "mocha -r dotenv/config --timeout 5000"
   },
 
   "keywords": [],
@@ -39,9 +39,9 @@
     "@types/mocha": "^10.0.6",
     "@types/node": "^20.14.9",
     "@types/node-fetch": "^2.6.11",
+    "@esbuild-kit/esm-loader": "^2.6.5",
     "mocha": "^10.4.0",
     "tsx": "^4.11.0",
-    "typescript": "^5.4.5",
-    "@esbuild-kit/esm-loader": "^2.6.5"
+    "typescript": "^5.4.5"
   }
 }
