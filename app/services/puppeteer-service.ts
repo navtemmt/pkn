@@ -47,8 +47,12 @@ export class PuppeteerService {
 
   async getTableState(): Promise<GameState | null> {
     const pokerFrame = this.pickPokerFrame();
+    
+    // Get hero name from Node environment or config
+    const heroName = process.env.HERO_NAME || '';
+    
     try {
-      return await (pokerFrame as puppeteer.Frame | puppeteer.Page).evaluate(() => {
+      return await (pokerFrame as puppeteer.Frame | puppeteer.Page).evaluate((heroNameArg: string) => {
         const parseValue = (text: string | null | undefined): number => {
           if (!text) return 0;
           const num = parseFloat((text || '').replace(/[^0-9.]/g, ''));
@@ -188,18 +192,17 @@ export class PuppeteerService {
           }
         });
         
-        // Determine hero name from environment if injected into page, else fallback to you-player
-        const envHero = (window as any).process?.env?.HERO_NAME || (document.querySelector('meta[name="hero-name"]') as HTMLMetaElement)?.content || '';
-        let heroName = (envHero || '').trim().toLowerCase();
-        if (!heroName) {
+        // Use the hero name passed as argument
+        let heroNameNormalized = (heroNameArg || '').trim().toLowerCase();
+        if (!heroNameNormalized) {
           const selfEl = document.querySelector('.table-player.you-player .table-player-name') as HTMLElement | null;
-          heroName = (selfEl?.innerText || '').trim().toLowerCase();
+          heroNameNormalized = (selfEl?.innerText || '').trim().toLowerCase();
         }
         
-        // If HERO_NAME provided, align isSelf based on name (in case .you-player missing)
-        if (heroName) {
+        // If hero name provided, align isSelf based on name (in case .you-player missing)
+        if (heroNameNormalized) {
           for (const p of players) {
-            if ((p.name || '').trim().toLowerCase() === heroName) {
+            if ((p.name || '').trim().toLowerCase() === heroNameNormalized) {
               (p as any).isSelf = true;
             }
           }
@@ -224,7 +227,7 @@ export class PuppeteerService {
           blinds, 
           actionButtons 
         } as any;
-      });
+      }, heroName);
     } catch (error) {
       console.error('Error capturing table state:', error);
       return null;
