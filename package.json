@@ -10,6 +10,7 @@
   "scripts": {
     "start": "node --loader @esbuild-kit/esm-loader app/index.ts",
     "start:dev": "node --loader @esbuild-kit/esm-loader app/index.ts --no-headless",
+    "start:dev:register": "node --import \"data:text/javascript,import { register } from 'node:module'; import { pathToFileURL } from 'node:url'; register('%40esbuild-kit/esm-loader', pathToFileURL('./'));\" app/index.ts --no-headless",
     "build": "tsc",
     "test": "mocha -r dotenv/config --timeout 5000"
   },
