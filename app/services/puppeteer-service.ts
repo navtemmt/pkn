@@ -66,13 +66,13 @@ export class PuppeteerService {
     const pages = await this.browser.pages();
     this.page = pages.length > 0 ? pages[0] : await this.browser.newPage();
   
-    // Ensure future navigations see __name before any page scripts run.
+    // Pre-seed __name for all future navigations (runs before any page scripts)
     await this.page.evaluateOnNewDocument(() => {
       // @ts-ignore
       (window as any).__name = (fn: any, _n: string) => fn;
     });
   
-    // If reusing an already-loaded page, inject __name now for the current document and its frames.
+    // If reusing an already-loaded page, inject into the current document and frames now
     if (this.page.url() !== 'about:blank') {
       try {
         await this.page.evaluate(() => {
@@ -93,7 +93,7 @@ export class PuppeteerService {
       }
     }
   
-    // Optional interception; keep inside the method body with proper semicolons/braces.
+    // Optional interception: uncomment when needed
     // await this.page.setRequestInterception(true);
   
     this.page.setDefaultTimeout(this.default_timeout);
@@ -107,6 +107,7 @@ export class PuppeteerService {
       }
     });
   }
+
 
   
     // Optional: set default timeouts
