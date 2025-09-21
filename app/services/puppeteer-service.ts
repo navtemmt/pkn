@@ -40,35 +40,57 @@ export class PuppeteerService {
   async init(): Promise<void> {
     const wsEndpoint = (process.env.BROWSER_WS_ENDPOINT || '').trim();
     const browserURL = (process.env.BROWSER_URL || '').trim();
-
+  
     try {
-      if (wsEndpoint.startsWith('ws://') || wsEndpoint.startsWith('wss://')) {
-        // Connect using a specific WebSocket endpoint
+      if (wsEndpoint && (wsEndpoint.startsWith('ws://') || wsEndpoint.startsWith('wss://'))) {
+        // Connect using an exact DevTools WebSocket endpoint
         this.browser = await puppeteer.connect({ browserWSEndpoint: wsEndpoint });
-        console.log('INFO: Successfully connected to browser via WebSocket endpoint.');
-      } else if (browserURL.startsWith('http://') || browserURL.startsWith('https://')) {
-        // Connect using a base HTTP URL (more common for local debugging)
-        this.browser = await puppeteer.connect({ browserURL: browserURL });
-        console.log('INFO: Successfully connected to browser via HTTP URL.');
+        console.log('INFO: Connected to browser via WebSocket endpoint.');
+      } else if (browserURL && (browserURL.startsWith('http://') || browserURL.startsWith('https://'))) {
+        // Connect using the DevTools HTTP URL; Puppeteer discovers WS endpoint
+        this.browser = await puppeteer.connect({ browserURL });
+        console.log('INFO: Connected to browser via DevTools HTTP URL.');
       } else {
-        // Launch a new browser instance if no connection info is provided
         console.log('INFO: No browser connection info found, launching new instance.');
-        this.browser = await puppeteer.launch({ defaultViewport: null, headless: this.headless_flag });
+        this.browser = await puppeteer.launch({
+          defaultViewport: null,
+          headless: this.headless_flag,
+        });
       }
     } catch (e) {
-        console.warn('WARN: Failed to connect to existing browser, launching a new one.', e);
-        this.browser = await puppeteer.launch({ defaultViewport: null, headless: this.headless_flag });
+      console.warn('WARN: Failed to connect to existing browser, launching a new one.', e);
+      this.browser = await puppeteer.launch({
+        defaultViewport: null,
+        headless: this.headless_flag,
+      });
     }
-
+  
+    // Prefer a fresh page; fall back to first page if present
     const pages = await this.browser.pages();
     this.page = pages.length > 0 ? pages[0] : await this.browser.newPage();
-    
-    this.page.on('pageerror', err => console.error('pageerror:', err));
-    this.page.on('console', msg => {
-        if (msg.type() === 'error' || msg.type() === 'warn') {
-            console.log(`[console:${msg.type()}] ${msg.text()}`);
-        }
+  
+    // Seed the page context before any site scripts run to avoid evaluate crashes.
+    await this.page.evaluateOnNewDocument(() => {
+      // @ts-ignore
+      // Neutralize name-preserving helper calls injected by some toolchains.
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      (window as any).__name = (fn: any, _n: string) => fn;
     });
+  
+    // Optional: set default timeouts
+    this.page.setDefaultTimeout(this.default_timeout);
+    this.page.setDefaultNavigationTimeout(this.default_timeout);
+  
+    // Existing listeners
+    this.page.on('pageerror', (err) => console.error('pageerror:', err));
+    this.page.on('console', (msg) => {
+      const t = msg.type();
+      if (t === 'error' || t === 'warn') {
+        console.log(`[console:${t}] ${msg.text()}`);
+      }
+    });
+  }
+
 
     await this.page.setRequestInterception(true);
     this.page.on('request', (request) => {
