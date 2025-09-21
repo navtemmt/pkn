@@ -43,11 +43,9 @@ export class PuppeteerService {
   
     try {
       if (wsEndpoint && (wsEndpoint.startsWith('ws://') || wsEndpoint.startsWith('wss://'))) {
-        // Connect using an exact DevTools WebSocket endpoint
         this.browser = await puppeteer.connect({ browserWSEndpoint: wsEndpoint });
         console.log('INFO: Connected to browser via WebSocket endpoint.');
       } else if (browserURL && (browserURL.startsWith('http://') || browserURL.startsWith('https://'))) {
-        // Connect using the DevTools HTTP URL; Puppeteer discovers WS endpoint
         this.browser = await puppeteer.connect({ browserURL });
         console.log('INFO: Connected to browser via DevTools HTTP URL.');
       } else {
@@ -65,17 +63,51 @@ export class PuppeteerService {
       });
     }
   
-    // Prefer a fresh page; fall back to first page if present
     const pages = await this.browser.pages();
     this.page = pages.length > 0 ? pages[0] : await this.browser.newPage();
   
-    // Seed the page context before any site scripts run to avoid evaluate crashes.
+    // Ensure future navigations see __name before any page scripts run.
     await this.page.evaluateOnNewDocument(() => {
       // @ts-ignore
-      // Neutralize name-preserving helper calls injected by some toolchains.
-      // eslint-disable-next-line @typescript-eslint/no-unused-vars
       (window as any).__name = (fn: any, _n: string) => fn;
     });
+  
+    // If reusing an already-loaded page, inject __name now for the current document and its frames.
+    if (this.page.url() !== 'about:blank') {
+      try {
+        await this.page.evaluate(() => {
+          // @ts-ignore
+          (window as any).__name = (fn: any, _n: string) => fn;
+        });
+        const frames = this.page.frames();
+        await Promise.all(
+          frames.map((f) =>
+            f.evaluate(() => {
+              // @ts-ignore
+              (window as any).__name = (fn: any, _n: string) => fn;
+            })
+          )
+        );
+      } catch (err) {
+        console.warn('WARN: Failed to inject __name into existing document/frames.', err);
+      }
+    }
+  
+    // Optional interception; keep inside the method body with proper semicolons/braces.
+    // await this.page.setRequestInterception(true);
+  
+    this.page.setDefaultTimeout(this.default_timeout);
+    this.page.setDefaultNavigationTimeout(this.default_timeout);
+  
+    this.page.on('pageerror', (err) => console.error('pageerror:', err));
+    this.page.on('console', (msg) => {
+      const t = msg.type();
+      if (t === 'error' || t === 'warn') {
+        console.log(`[console:${t}] ${msg.text()}`);
+      }
+    });
+  }
+
   
     // Optional: set default timeouts
     this.page.setDefaultTimeout(this.default_timeout);
