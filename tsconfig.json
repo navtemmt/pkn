@@ -1,35 +1,26 @@
 {
   "compilerOptions": {
-    /* Language and Environment */
     "target": "ES2022",
     "lib": ["ES2022"],
 
-    /* Modules (compile to Node-friendly CJS for simple runtime) */
     "module": "CommonJS",
     "moduleResolution": "Node",
 
-    /* Paths and Emit */
     "rootDir": ".",
     "outDir": "dist",
     "resolveJsonModule": true,
-    "noEmit": false,             
+    "noEmit": false,
 
-    /* JS support */
     "allowJs": true,
     "checkJs": false,
 
-    /* Interop */
     "esModuleInterop": true,
     "forceConsistentCasingInFileNames": true,
 
-    /* Type Checking */
     "strict": true,
     "useUnknownInCatchVariables": false,
     "skipLibCheck": true
-
-    /* Removed allowImportingTsExtensions because it requires
-       bundler resolution + noEmit/emitDeclarationOnly, which we’re not using */
-    // "allowImportingTsExtensions": true
   },
-  "include": ["app", "index.ts", "**/*.ts"]
+  "include": ["app", "index.ts", "**/*.ts"],
+  "exclude": ["node_modules", "dist"]
 }
