@@ -2,6 +2,7 @@ import puppeteer from 'puppeteer';
 import { sleep, waitForEnter } from '../helpers/bot-helper.ts';
 import type { Response } from '../utils/error-handling-utils.ts';
 import fs from 'fs/promises';
+import { setTimeout as delay } from 'node:timers/promises';
 
 const cookiesPath = './cookies.json';
 const localStoragePath = './localStorage.json';
@@ -42,7 +43,7 @@ export class PuppeteerService {
     const browserURL = (process.env.BROWSER_URL || '').trim();
 
     try {
-      // Sanitize: if a ws:// URL was placed in BROWSER_URL, treat it as WS endpoint instead of HTTP.
+      // Sanitize: if a ws:// URL was placed in BROWSER_URL, treat it as WS endpoint.
       if (browserURL.startsWith('ws://') || browserURL.startsWith('wss://')) {
         this.browser = await puppeteer.connect({ browserWSEndpoint: browserURL });
         console.log('INFO: Connected via WebSocket endpoint (from BROWSER_URL).');
@@ -140,7 +141,6 @@ export class PuppeteerService {
     try {
       const localStorageData = await fs.readFile(localStoragePath, 'utf8');
       const sessionStorageData = await fs.readFile(sessionStoragePath, 'utf8');
-
       await this.page.evaluateOnNewDocument((ls, ss) => {
         try {
           const lsObj = JSON.parse(ls || '{}') as Record<string, string>;
@@ -172,7 +172,7 @@ export class PuppeteerService {
 
       // Navigate to PokerNow and allow a short settle delay.
       await this.page.goto('https://www.pokernow.club/', { waitUntil: 'load', timeout: 60000 });
-      await this.page.waitForTimeout(1500);
+      await delay(1500); // replace deprecated page.waitForTimeout
 
       console.log('INFO: Navigated to PokerNow with pre-loaded session.');
       if (await this.isLoggedIn()) {
@@ -183,7 +183,7 @@ export class PuppeteerService {
     } catch (error) {
       console.log('WARNING: No valid session found. Falling back to manual login.');
       await this.page.goto('https://www.pokernow.club/', { waitUntil: 'load', timeout: 60000 });
-      await this.page.waitForTimeout(1500);
+      await delay(1500); // replace deprecated page.waitForTimeout
       await waitForEnter('ACTION REQUIRED: Please log in to PokerNow, then press Enter...');
       await this.saveSession();
     }
