@@ -1,18 +1,23 @@
 {
   "name": "pokernow-gpt-manual",
   "version": "1.0.0",
-  "main": "app/index.ts",
-  "type": "module",
+  "description": "Modified pokernow-gpt for manual ChatGPT workflow",
+  "license": "ISC",
+
+  "main": "dist/app/index.js",
+
   "scripts": {
-    "start": "tsx app/index.ts",
-    "start:dev": "tsx app/index.ts --no-headless",
-    "test": "mocha -r dotenv/config --timeout 5000"
+    "build": "tsc",
+    "start": "node dist/app/index.js",
+    "start:dev": "node dist/app/index.js --no-headless",
+    "test": "mocha -r dotenv/config --timeout 5000",
+
+    "start:esm": "node --loader @esbuild-kit/esm-loader app/index.ts --no-headless"
   },
 
   "keywords": [],
   "author": "",
-  "license": "ISC",
-  "description": "Modified pokernow-gpt for manual ChatGPT workflow",
+
   "dependencies": {
     "chai": "^5.1.1",
     "dotenv": "^16.4.5",
@@ -20,21 +25,23 @@
     "node-fetch": "^2.7.0",
     "phe": "^0.6.0",
     "puppeteer": "^22.10.0",
-    "sqlite": "^5.1.1", 
+    "sqlite": "^5.1.1",
     "ts-node": "^10.9.2",
     "clipboardy": "^4.0.0",
     "enquirer": "^2.4.1",
     "sharp": "^0.33.2",
     "tesseract.js": "^5.0.4"
   },
+
   "devDependencies": {
     "@types/chai": "^4.3.16",
     "@types/express": "^4.17.21",
-    "@types/mocha": "^10.0.6", 
+    "@types/mocha": "^10.0.6",
     "@types/node": "^20.14.9",
     "@types/node-fetch": "^2.6.11",
     "mocha": "^10.4.0",
     "tsx": "^4.11.0",
-    "typescript": "^5.4.5"
+    "typescript": "^5.4.5",
+    "@esbuild-kit/esm-loader": "^2.6.5"
   }
 }
