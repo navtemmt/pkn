@@ -42,10 +42,15 @@ export class PuppeteerService {
     const browserURL = (process.env.BROWSER_URL || '').trim();
 
     try {
-      if (wsEndpoint && (wsEndpoint.startsWith('ws://') || wsEndpoint.startsWith('wss://'))) {
+      // Sanitize: if a ws:// URL was placed in BROWSER_URL, treat it as WS endpoint instead of HTTP.
+      if (browserURL.startsWith('ws://') || browserURL.startsWith('wss://')) {
+        this.browser = await puppeteer.connect({ browserWSEndpoint: browserURL });
+        console.log('INFO: Connected via WebSocket endpoint (from BROWSER_URL).');
+      } else if (wsEndpoint && (wsEndpoint.startsWith('ws://') || wsEndpoint.startsWith('wss://'))) {
         this.browser = await puppeteer.connect({ browserWSEndpoint: wsEndpoint });
         console.log('INFO: Connected to browser via WebSocket endpoint.');
       } else if (browserURL && (browserURL.startsWith('http://') || browserURL.startsWith('https://'))) {
+        // Correct browserURL format is http://host:port; Puppeteer discovers the WS endpoint.
         this.browser = await puppeteer.connect({ browserURL });
         console.log('INFO: Connected to browser via DevTools HTTP URL.');
       } else {
@@ -66,13 +71,13 @@ export class PuppeteerService {
     const pages = await this.browser.pages();
     this.page = pages.length > 0 ? pages[0] : await this.browser.newPage();
 
-    // Pre-seed __name for all future navigations (runs before any page scripts).
+    // Seed __name before any page scripts (prevents evaluate crashes if helpers were injected).
     await this.page.evaluateOnNewDocument(() => {
       // @ts-ignore
       (window as any).__name = (fn: any, _n: string) => fn;
     });
 
-    // If reusing an already-loaded page, inject into the current document and frames now.
+    // If reusing an already-loaded page, inject into current doc and frames now.
     if (this.page.url() !== 'about:blank') {
       try {
         await this.page.evaluate(() => {
@@ -93,11 +98,9 @@ export class PuppeteerService {
       }
     }
 
-    // Optional interception (uncomment when needed).
-    // await this.page.setRequestInterception(true);
-
-    this.page.setDefaultTimeout(this.default_timeout);
-    this.page.setDefaultNavigationTimeout(this.default_timeout);
+    // Raise default timeouts to avoid premature timeouts on first loads.
+    this.page.setDefaultTimeout(60000);
+    this.page.setDefaultNavigationTimeout(60000);
 
     this.page.on('pageerror', (err) => console.error('pageerror:', err));
     this.page.on('console', (msg) => {
@@ -126,21 +129,27 @@ export class PuppeteerService {
 
   private async loadSession(): Promise<void> {
     console.log('INFO: Attempting to load saved session...');
-    const cookies = JSON.parse(await fs.readFile(cookiesPath, 'utf8'));
-    await this.page.setCookie(...cookies);
-    const localStorageData = await fs.readFile(localStoragePath, 'utf8');
-    await this.page.evaluate((data) => {
-      for (const [key, value] of Object.entries(JSON.parse(data))) {
-        localStorage.setItem(key, value as string);
-      }
-    }, localStorageData);
-    const sessionStorageData = await fs.readFile(sessionStoragePath, 'utf8');
-    await this.page.evaluate((data) => {
-      for (const [key, value] of Object.entries(JSON.parse(data))) {
-        sessionStorage.setItem(key, value as string);
-      }
-    }, sessionStorageData);
-    console.log('SUCCESS: Full session has been loaded.');
+
+    // Cookies must match the site’s origin (domain or url) to apply.
+    try {
+      const cookies = JSON.parse(await fs.readFile(cookiesPath, 'utf8'));
+      await this.page.setCookie(...cookies);
+    } catch {}
+
+    // Pre-inject storage on the target origin before navigation.
+    try {
+      const localStorageData = await fs.readFile(localStoragePath, 'utf8');
+      const sessionStorageData = await fs.readFile(sessionStoragePath, 'utf8');
+
+      await this.page.evaluateOnNewDocument((ls, ss) => {
+        try {
+          const lsObj = JSON.parse(ls || '{}') as Record<string, string>;
+          for (const [k, v] of Object.entries(lsObj)) localStorage.setItem(k, v);
+          const ssObj = JSON.parse(ss || '{}') as Record<string, string>;
+          for (const [k, v] of Object.entries(ssObj)) sessionStorage.setItem(k, v);
+        } catch {}
+      }, localStorageData, sessionStorageData);
+    } catch {}
   }
 
   private async isLoggedIn(): Promise<boolean> {
@@ -155,9 +164,16 @@ export class PuppeteerService {
 
   private async manageLoginAndCookies(): Promise<void> {
     try {
-      await this.page.goto('about:blank', { waitUntil: 'networkidle2' });
+      // Always move to a neutral page first.
+      await this.page.goto('about:blank', { waitUntil: 'load', timeout: 60000 });
+
+      // Prepare session (cookies and storages) before hitting the site.
       await this.loadSession();
-      await this.page.goto('https://www.pokernow.club/', { waitUntil: 'networkidle2' });
+
+      // Navigate to PokerNow and allow a short settle delay.
+      await this.page.goto('https://www.pokernow.club/', { waitUntil: 'load', timeout: 60000 });
+      await this.page.waitForTimeout(1500);
+
       console.log('INFO: Navigated to PokerNow with pre-loaded session.');
       if (await this.isLoggedIn()) {
         console.log('SUCCESS: Login confirmed. Session is valid.');
@@ -166,7 +182,8 @@ export class PuppeteerService {
       }
     } catch (error) {
       console.log('WARNING: No valid session found. Falling back to manual login.');
-      await this.page.goto('https://www.pokernow.club/', { waitUntil: 'networkidle2' });
+      await this.page.goto('https://www.pokernow.club/', { waitUntil: 'load', timeout: 60000 });
+      await this.page.waitForTimeout(1500);
       await waitForEnter('ACTION REQUIRED: Please log in to PokerNow, then press Enter...');
       await this.saveSession();
     }
@@ -185,7 +202,7 @@ export class PuppeteerService {
       return { code: 'error', error: new Error('Game ID is invalid.') };
     }
     try {
-      await this.page.goto(`https://www.pokernow.club/games/${game_id}`, { waitUntil: 'networkidle2' });
+      await this.page.goto(`https://www.pokernow.club/games/${game_id}`, { waitUntil: 'load', timeout: 60000 });
       await this.page.setViewport({ width: 1280, height: 800 });
       return { code: 'success', data: null, msg: `Opened PokerNow game ${game_id}` };
     } catch (e) {
@@ -216,7 +233,6 @@ export class PuppeteerService {
           }
         }
 
-        // Local Player shape for page context (avoid importing TS types into the page)
         type P = {
           seat: number;
           name: string;
