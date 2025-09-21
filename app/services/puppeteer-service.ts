@@ -213,6 +213,83 @@ export class PuppeteerService {
   private pickPokerFrame(): puppeteer.Page | puppeteer.Frame {
     return this.page.frames().find((fr) => fr.url().includes('pokernow.club')) || this.page;
   }
+  
+  // ADD: seat-state detection covering full tables and MTT UIs.
+  type SeatStatus = {
+    seated: boolean;
+    tableFull: boolean;
+    joinable: boolean;
+    waiting: boolean;
+    occupied: number;
+    capacity: number;
+  };
+  
+  async getSeatStatus(): Promise<SeatStatus> {
+    const fr = this.pickPokerFrame();
+    return await (fr as puppeteer.Frame | puppeteer.Page).evaluate(() => {
+      // Identify seat boxes by data-seat; adjust if PokerNow changes attributes.
+      const seatNodes = Array.from(document.querySelectorAll<HTMLElement>('[data-seat]'));
+      const capacity = seatNodes.length;
+  
+      // Occupied seats: rows with a non-empty name.
+      const occupied = seatNodes.filter((el) => {
+        const name = (el.querySelector('.table-player-name') as HTMLElement)?.innerText?.trim() || '';
+        return name.length > 0;
+      }).length;
+  
+      // Hero detection: explicit flag or presence of action buttons (common indicator of “my turn”).
+      const heroSeat = document.querySelector('.table-player.you-player') != null;
+      const actionPanel = document.querySelector('.action-buttons, .action-button, .buttons, .raise-button') != null;
+  
+      // Joinable: generic “SIT” / “JOIN” controls anywhere visible in the frame.
+      const joinable = Array.from(document.querySelectorAll<HTMLElement>('button, a, [role="button"], [class]'))
+        .some((e) => /(join|sit)/i.test((e.textContent || '').trim()));
+  
+      // Waiting: presence of a visible “WAITING” badge/panel.
+      const waiting = Array.from(document.querySelectorAll<HTMLElement>('*'))
+        .some((e) => /\bwaiting\b/i.test((e.textContent || '').trim()));
+  
+      const seated = heroSeat || actionPanel;
+      const tableFull = !seated && !joinable && occupied >= capacity && capacity > 0;
+  
+      return { seated, tableFull, joinable, waiting, occupied, capacity };
+    });
+  }
+  
+  // ADD: short non-blocking wait for seat opening via generic SIT/JOIN controls.
+  async waitForSeatOpen(timeoutMs = 5000): Promise<boolean> {
+    const fr = this.pickPokerFrame();
+    try {
+      await (fr as puppeteer.Frame | puppeteer.Page).waitForFunction(() => {
+        return Array.from(document.querySelectorAll<HTMLElement>('button, a, [role="button"], [class]'))
+          .some((e) => /(join|sit)/i.test((e.textContent || '').trim()));
+      }, { timeout: timeoutMs, polling: 'mutation' });
+      return true;
+    } catch {
+      return false;
+    }
+  }
+  
+  // ADD: concise hero-turn detection with a short fallback wait.
+  async isHeroTurn(timeoutMs = 500): Promise<boolean> {
+    const fr = this.pickPokerFrame();
+    const hasAction = await (fr as puppeteer.Frame | puppeteer.Page).$(''.concat(
+      '.action-buttons, .action-button, .buttons, .raise-button'
+    ));
+    if (hasAction) return true;
+    const hasIndicator = await (fr as puppeteer.Frame | puppeteer.Page).$('.current-player-indicator');
+    if (hasIndicator) return true;
+    // brief wait to catch transient render
+    try {
+      await (fr as puppeteer.Frame | puppeteer.Page).waitForSelector(
+        '.action-buttons, .action-button, .buttons, .raise-button',
+        { timeout: timeoutMs }
+      );
+      return true;
+    } catch {
+      return false;
+    }
+  }
 
   async getTableState(): Promise<GameState | null> {
     const pokerFrame = this.pickPokerFrame();
