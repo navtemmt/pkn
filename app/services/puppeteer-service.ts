@@ -1,4 +1,4 @@
-async getTableState(): Promise<GameState | null> {
+async getTableState(): Promise<gamestate | null> {
   const pokerFrame = this.pickPokerFrame();
   try {
     return await (pokerFrame as puppeteer.Frame | puppeteer.Page).evaluate(() => {
@@ -7,9 +7,9 @@ async getTableState(): Promise<GameState | null> {
         const num = parseFloat((text || '').replace(/[^0-9.]/g, ''));
         return isNaN(num) ? 0 : num;
       };
-
-      // Dealer seat detection via dealer button class naming
-      const dealerButtonElement = document.querySelector('[class*="dealer-button-ctn"]');
+      
+      // Dealer seat detection via dealer button
+      const dealerButtonElement = document.querySelector('.dealer-button-ctn .button');
       let dealerSeat = -1;
       if (dealerButtonElement) {
         const dealerClass = Array.from(dealerButtonElement.classList).find((c) => c.startsWith('dealer-position-'));
@@ -20,7 +20,7 @@ async getTableState(): Promise<GameState | null> {
           if (!Number.isNaN(parsed)) dealerSeat = parsed;
         }
       }
-
+      
       type P = {
         seat: number;
         name: string;
@@ -32,27 +32,57 @@ async getTableState(): Promise<GameState | null> {
         isFolded: boolean;
         isAllIn: boolean;
         holeCards: string[];
+        status: string;
       };
-
+      
       const players = Array.from(document.querySelectorAll('.table-player'))
         .map((el) => {
           const seat = parseInt(el.getAttribute('data-seat') || '0', 10);
           const name = (el.querySelector('.table-player-name') as HTMLElement)?.innerText?.trim() || '';
           if (!name) return null;
+          
           const isSelf = el.classList.contains('you-player');
-          const isCurrentTurn = !!el.querySelector('.current-player-indicator');
+          const isCurrentTurn = !!el.querySelector('.decision-current');
           const isFolded = el.classList.contains('folded');
           const isAllIn = el.classList.contains('all-in');
-          const stack = parseValue((el.querySelector('.table-player-stack') as HTMLElement)?.innerText);
-          const bet = parseValue((el.querySelector('.table-player-bet-value') as HTMLElement)?.innerText);
-          const holeCards = Array.from(el.querySelectorAll('.table-player-cards .card'))
-            .map((cardEl) => {
-              const v = (cardEl.querySelector('.value') as HTMLElement)?.innerText || '';
-              const s = (cardEl.querySelector('.sub-suit') as HTMLElement)?.innerText || '';
-              const token = `${v}${s}`.trim();
-              return token.length ? token : null;
-            })
-            .filter(Boolean) as string[];
+          
+          // Handle stack with All In check
+          let stack = 0;
+          const stackEl = el.querySelector('.table-player-stack');
+          if (stackEl) {
+            const allInText = stackEl.innerText?.trim();
+            if (allInText?.toLowerCase().includes('all in')) {
+              stack = 0; // All in means 0 stack remaining
+            } else {
+              const chipsValue = stackEl.querySelector('.chips-value') as HTMLElement;
+              stack = parseValue(chipsValue?.innerText);
+            }
+          }
+          
+          const betEl = el.querySelector('.table-player-bet-value .chips-value') as HTMLElement;
+          const bet = parseValue(betEl?.innerText);
+          
+          // Player status
+          const statusEl = el.querySelector('.table-player-status-icon') as HTMLElement;
+          const status = statusEl?.innerText?.trim() || '';
+          
+          // Hole cards for hero only
+          const holeCards: string[] = [];
+          if (isSelf) {
+            const cardElements = el.querySelectorAll('.card-container .card');
+            cardElements.forEach((cardEl) => {
+              const valueEl = cardEl.querySelector('.value') as HTMLElement;
+              const suitEl = cardEl.querySelector('.suit') as HTMLElement;
+              if (valueEl && suitEl) {
+                const value = valueEl.innerText?.trim() || '';
+                const suit = suitEl.innerText?.trim() || '';
+                if (value && suit) {
+                  holeCards.push(`${value}${suit}`);
+                }
+              }
+            });
+          }
+          
           return {
             seat,
             name,
@@ -64,30 +94,53 @@ async getTableState(): Promise<GameState | null> {
             isFolded,
             isAllIn,
             holeCards,
+            status,
           } as P | null;
         })
         .filter((p): p is P => p !== null);
-
-      // Community cards (flop/turn/river)
-      const communityCards = Array.from(document.querySelectorAll('.table-community-cards .card'))
-        .map((cardEl) => {
-          const v = (cardEl.querySelector('.value') as HTMLElement)?.innerText || '';
-          const s = (cardEl.querySelector('.sub-suit') as HTMLElement)?.innerText || '';
-          const token = `${v}${s}`.trim();
-          return token.length ? token : null;
-        })
-        .filter(Boolean) as string[];
-
-      // Pot detection: prefer total, fallback to main
+      
+      // Board cards (community cards)
+      const communityCards: string[] = [];
+      const boardCardElements = document.querySelectorAll('.table-cards .card-container .card');
+      boardCardElements.forEach((cardEl) => {
+        const valueEl = cardEl.querySelector('.value') as HTMLElement;
+        const suitEl = cardEl.querySelector('.suit') as HTMLElement;
+        if (valueEl && suitEl) {
+          const value = valueEl.innerText?.trim() || '';
+          const suit = suitEl.innerText?.trim() || '';
+          if (value && suit) {
+            communityCards.push(`${value}${suit}`);
+          }
+        }
+      });
+      
+      // Pot detection
       let pot = 0;
-      const totalPotEl = document.querySelector('.table-pot-size .total-value');
-      if (totalPotEl) {
-        pot = parseValue(totalPotEl.textContent);
-      } else {
-        const mainPotEl = document.querySelector('.table-pot-size .main-value .normal-value');
-        if (mainPotEl) pot = parseValue(mainPotEl.textContent);
+      const potEl = document.querySelector('.main-value .normal-value') as HTMLElement;
+      if (potEl) {
+        pot = parseValue(potEl.textContent);
       }
-
+      
+      // Blinds
+      const blinds: number[] = [];
+      const blindElements = document.querySelectorAll('.blind-value-ctn .normal-value');
+      blindElements.forEach((blindEl) => {
+        const blindValue = parseValue((blindEl as HTMLElement).textContent);
+        if (blindValue > 0) {
+          blinds.push(blindValue);
+        }
+      });
+      
+      // Action buttons
+      const actionButtons: string[] = [];
+      const buttonElements = document.querySelectorAll('button.action-button');
+      buttonElements.forEach((btnEl) => {
+        const buttonText = (btnEl as HTMLElement).textContent?.trim() || '';
+        if (buttonText) {
+          actionButtons.push(buttonText);
+        }
+      });
+      
       // Determine hero name from environment if injected into page, else fallback to you-player
       const envHero = (window as any).process?.env?.HERO_NAME || (document.querySelector('meta[name="hero-name"]') as HTMLMetaElement)?.content || '';
       let heroName = (envHero || '').trim().toLowerCase();
@@ -95,7 +148,7 @@ async getTableState(): Promise<GameState | null> {
         const selfEl = document.querySelector('.table-player.you-player .table-player-name') as HTMLElement | null;
         heroName = (selfEl?.innerText || '').trim().toLowerCase();
       }
-
+      
       // If HERO_NAME provided, align isSelf based on name (in case .you-player missing)
       if (heroName) {
         for (const p of players) {
@@ -104,23 +157,26 @@ async getTableState(): Promise<GameState | null> {
           }
         }
       }
-
-      // Action turn: if hero row has current-player-indicator or global action buttons for you-player
+      
+      // Action turn: check for suspended signal or decision-current on you-player
       let actionTurn = false;
-      const heroRow = heroName
-        ? Array.from(document.querySelectorAll('.table-player')).find((el) => {
-            const n = (el.querySelector('.table-player-name') as HTMLElement)?.innerText?.trim().toLowerCase() || '';
-            return n === heroName;
-          })
-        : document.querySelector('.table-player.you-player');
-      if (heroRow && heroRow.querySelector('.current-player-indicator')) actionTurn = true;
-      if (!actionTurn && document.querySelector('.you-player .action-buttons, .you-player .action-button')) actionTurn = true;
-
+      const suspendedSignal = document.querySelector('.action-signal.suspended');
+      const heroDecisionCurrent = document.querySelector('.you-player .decision-current');
+      actionTurn = !!(suspendedSignal || heroDecisionCurrent);
+      
       // Expose actionTurn and heroCards by augmenting return if consumer widens type later
       const hero = players.find((p) => p.isSelf) || null;
       const heroCards = hero ? hero.holeCards : [];
-
-      return { players, communityCards, pot, actionTurn, heroCards } as any;
+      
+      return { 
+        players, 
+        communityCards, 
+        pot, 
+        actionTurn, 
+        heroCards, 
+        blinds, 
+        actionButtons 
+      } as any;
     });
   } catch (error) {
     console.error('Error capturing table state:', error);
