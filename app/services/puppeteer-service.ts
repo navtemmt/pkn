@@ -40,7 +40,7 @@ export class PuppeteerService {
   async init(): Promise<void> {
     const wsEndpoint = (process.env.BROWSER_WS_ENDPOINT || '').trim();
     const browserURL = (process.env.BROWSER_URL || '').trim();
-  
+
     try {
       if (wsEndpoint && (wsEndpoint.startsWith('ws://') || wsEndpoint.startsWith('wss://'))) {
         this.browser = await puppeteer.connect({ browserWSEndpoint: wsEndpoint });
@@ -62,17 +62,17 @@ export class PuppeteerService {
         headless: this.headless_flag,
       });
     }
-  
+
     const pages = await this.browser.pages();
     this.page = pages.length > 0 ? pages[0] : await this.browser.newPage();
-  
-    // Ensure future navigations have a safe __name in the page context.
+
+    // Pre-seed __name for all future navigations (runs before any page scripts).
     await this.page.evaluateOnNewDocument(() => {
       // @ts-ignore
       (window as any).__name = (fn: any, _n: string) => fn;
     });
-  
-    // If the page already has content (reused page), inject __name now for current doc + frames.
+
+    // If reusing an already-loaded page, inject into the current document and frames now.
     if (this.page.url() !== 'about:blank') {
       try {
         await this.page.evaluate(() => {
@@ -92,92 +92,18 @@ export class PuppeteerService {
         console.warn('WARN: Failed to inject __name into existing document/frames.', err);
       }
     }
-  
-    // Optional interception hook; keep commented until needed.
+
+    // Optional interception (uncomment when needed).
     // await this.page.setRequestInterception(true);
-  
+
     this.page.setDefaultTimeout(this.default_timeout);
     this.page.setDefaultNavigationTimeout(this.default_timeout);
-  
+
     this.page.on('pageerror', (err) => console.error('pageerror:', err));
     this.page.on('console', (msg) => {
       const t = msg.type();
       if (t === 'error' || t === 'warn') {
         console.log(`[console:${t}] ${msg.text()}`);
-      }
-    });
-  }
-
-  
-    const pages = await this.browser.pages();
-    this.page = pages.length > 0 ? pages[0] : await this.browser.newPage();
-  
-    // Pre-seed __name for all future navigations (runs before any page scripts)
-    await this.page.evaluateOnNewDocument(() => {
-      // @ts-ignore
-      (window as any).__name = (fn: any, _n: string) => fn;
-    });
-  
-    // If reusing an already-loaded page, inject into the current document and frames now
-    if (this.page.url() !== 'about:blank') {
-      try {
-        await this.page.evaluate(() => {
-          // @ts-ignore
-          (window as any).__name = (fn: any, _n: string) => fn;
-        });
-        const frames = this.page.frames();
-        await Promise.all(
-          frames.map((f) =>
-            f.evaluate(() => {
-              // @ts-ignore
-              (window as any).__name = (fn: any, _n: string) => fn;
-            })
-          )
-        );
-      } catch (err) {
-        console.warn('WARN: Failed to inject __name into existing document/frames.', err);
-      }
-    }
-  
-    // Optional interception: uncomment when needed
-    // await this.page.setRequestInterception(true);
-  
-    this.page.setDefaultTimeout(this.default_timeout);
-    this.page.setDefaultNavigationTimeout(this.default_timeout);
-  
-    this.page.on('pageerror', (err) => console.error('pageerror:', err));
-    this.page.on('console', (msg) => {
-      const t = msg.type();
-      if (t === 'error' || t === 'warn') {
-        console.log(`[console:${t}] ${msg.text()}`);
-      }
-    });
-  }
-
-
-
-  
-    // Optional: set default timeouts
-    this.page.setDefaultTimeout(this.default_timeout);
-    this.page.setDefaultNavigationTimeout(this.default_timeout);
-  
-    // Existing listeners
-    this.page.on('pageerror', (err) => console.error('pageerror:', err));
-    this.page.on('console', (msg) => {
-      const t = msg.type();
-      if (t === 'error' || t === 'warn') {
-        console.log(`[console:${t}] ${msg.text()}`);
-      }
-    });
-  }
-
-
-    await this.page.setRequestInterception(true);
-    this.page.on('request', (request) => {
-      if (request.url().includes('google-analytics')) {
-        request.abort();
-      } else {
-        request.continue();
       }
     });
 
@@ -203,13 +129,13 @@ export class PuppeteerService {
     const cookies = JSON.parse(await fs.readFile(cookiesPath, 'utf8'));
     await this.page.setCookie(...cookies);
     const localStorageData = await fs.readFile(localStoragePath, 'utf8');
-    await this.page.evaluate(data => {
+    await this.page.evaluate((data) => {
       for (const [key, value] of Object.entries(JSON.parse(data))) {
         localStorage.setItem(key, value as string);
       }
     }, localStorageData);
     const sessionStorageData = await fs.readFile(sessionStoragePath, 'utf8');
-    await this.page.evaluate(data => {
+    await this.page.evaluate((data) => {
       for (const [key, value] of Object.entries(JSON.parse(data))) {
         sessionStorage.setItem(key, value as string);
       }
@@ -218,11 +144,11 @@ export class PuppeteerService {
   }
 
   private async isLoggedIn(): Promise<boolean> {
-    const pokerFrame = this.pickPokerFrame(); 
+    const pokerFrame = this.pickPokerFrame();
     const loginCheckSelector = 'a[href="/sign_out"]';
     for (let i = 0; i < 10; i++) {
       if (await pokerFrame.$(loginCheckSelector)) return true;
-      await sleep(500); 
+      await sleep(500);
     }
     return false;
   }
@@ -234,9 +160,9 @@ export class PuppeteerService {
       await this.page.goto('https://www.pokernow.club/', { waitUntil: 'networkidle2' });
       console.log('INFO: Navigated to PokerNow with pre-loaded session.');
       if (await this.isLoggedIn()) {
-          console.log('SUCCESS: Login confirmed. Session is valid.');
+        console.log('SUCCESS: Login confirmed. Session is valid.');
       } else {
-          throw new Error('Stale session');
+        throw new Error('Stale session');
       }
     } catch (error) {
       console.log('WARNING: No valid session found. Falling back to manual login.');
@@ -245,7 +171,7 @@ export class PuppeteerService {
       await this.saveSession();
     }
   }
-    
+
   async closeBrowser(): Promise<void> {
     if ((process.env.BROWSER_WS_ENDPOINT || '').trim() || (process.env.BROWSER_URL || '').trim()) {
       this.browser.disconnect();
@@ -268,7 +194,7 @@ export class PuppeteerService {
   }
 
   private pickPokerFrame(): puppeteer.Page | puppeteer.Frame {
-    return this.page.frames().find(fr => fr.url().includes('pokernow.club')) || this.page;
+    return this.page.frames().find((fr) => fr.url().includes('pokernow.club')) || this.page;
   }
 
   async getTableState(): Promise<GameState | null> {
@@ -284,44 +210,59 @@ export class PuppeteerService {
         const dealerButtonElement = document.querySelector('[class*="dealer-button-ctn"]');
         let dealerSeat = -1;
         if (dealerButtonElement) {
-          const dealerClass = Array.from(dealerButtonElement.classList).find(c => c.startsWith('dealer-position-'));
+          const dealerClass = Array.from(dealerButtonElement.classList).find((c) => c.startsWith('dealer-position-'));
           if (dealerClass) {
             dealerSeat = parseInt(dealerClass.split('-')[2], 10);
           }
         }
 
-        const players: Player[] = Array.from(document.querySelectorAll('.table-player')).map(el => {
-          const seat = parseInt(el.getAttribute('data-seat') || '0', 10);
-          const name = (el.querySelector('.table-player-name') as HTMLElement)?.innerText || '';
-          if (!name) return null;
+        // Local Player shape for page context (avoid importing TS types into the page)
+        type P = {
+          seat: number;
+          name: string;
+          stack: number;
+          bet: number;
+          isSelf: boolean;
+          isDealer: boolean;
+          isCurrentTurn: boolean;
+          isFolded: boolean;
+          isAllIn: boolean;
+          holeCards: string[];
+        };
 
-          return {
-            seat,
-            name,
-            stack: parseValue((el.querySelector('.table-player-stack') as HTMLElement)?.innerText),
-            bet: parseValue((el.querySelector('.table-player-bet-value') as HTMLElement)?.innerText),
-            isSelf: el.classList.contains('you-player'),
-            isDealer: seat === dealerSeat,
-            isCurrentTurn: !!el.querySelector('.current-player-indicator'),
-            isFolded: el.classList.contains('folded'),
-            isAllIn: el.classList.contains('all-in'),
-            holeCards: Array.from(el.querySelectorAll('.table-player-cards .card')).map(cardEl => 
-                `${(cardEl.querySelector('.value') as HTMLElement)?.innerText}${(cardEl.querySelector('.sub-suit') as HTMLElement)?.innerText}`
-            ).filter(Boolean)
-          };
-        }).filter((p): p is Player => p !== null);
+        const players = Array.from(document.querySelectorAll('.table-player'))
+          .map((el) => {
+            const seat = parseInt(el.getAttribute('data-seat') || '0', 10);
+            const name = (el.querySelector('.table-player-name') as HTMLElement)?.innerText || '';
+            if (!name) return null;
+            return {
+              seat,
+              name,
+              stack: parseValue((el.querySelector('.table-player-stack') as HTMLElement)?.innerText),
+              bet: parseValue((el.querySelector('.table-player-bet-value') as HTMLElement)?.innerText),
+              isSelf: el.classList.contains('you-player'),
+              isDealer: seat === dealerSeat,
+              isCurrentTurn: !!el.querySelector('.current-player-indicator'),
+              isFolded: el.classList.contains('folded'),
+              isAllIn: el.classList.contains('all-in'),
+              holeCards: Array.from(el.querySelectorAll('.table-player-cards .card'))
+                .map((cardEl) => `${(cardEl.querySelector('.value') as HTMLElement)?.innerText}${(cardEl.querySelector('.sub-suit') as HTMLElement)?.innerText}`)
+                .filter(Boolean) as string[],
+            } as P | null;
+          })
+          .filter((p): p is P => p !== null);
 
-        const communityCards = Array.from(document.querySelectorAll('.table-community-cards .card')).map(cardEl => 
-            `${(cardEl.querySelector('.value') as HTMLElement)?.innerText}${(cardEl.querySelector('.sub-suit') as HTMLElement)?.innerText}`
-        ).filter(Boolean);
+        const communityCards = Array.from(document.querySelectorAll('.table-community-cards .card'))
+          .map((cardEl) => `${(cardEl.querySelector('.value') as HTMLElement)?.innerText}${(cardEl.querySelector('.sub-suit') as HTMLElement)?.innerText}`)
+          .filter(Boolean) as string[];
 
         let pot = 0;
         const totalPotEl = document.querySelector('.table-pot-size .total-value');
         if (totalPotEl) {
-            pot = parseValue(totalPotEl.textContent);
+          pot = parseValue(totalPotEl.textContent);
         } else {
-            const mainPotEl = document.querySelector('.table-pot-size .main-value .normal-value');
-            if (mainPotEl) pot = parseValue(mainPotEl.textContent);
+          const mainPotEl = document.querySelector('.table-pot-size .main-value .normal-value');
+          if (mainPotEl) pot = parseValue(mainPotEl.textContent);
         }
 
         return { players, communityCards, pot };
