@@ -1,5 +1,6 @@
 import * as puppeteer from 'puppeteer';
 import { promises as fs } from 'fs';
+
 interface GameState {
   players: Array<{
     seat: number;
@@ -21,14 +22,45 @@ interface GameState {
   blinds: number[];
   actionButtons: string[];
 }
+
 export class PuppeteerService {
   private browser: puppeteer.Browser | null = null;
   private page: puppeteer.Page | null = null;
-  async init(): Promise<void> {
-    if (!this.browser) {
-      await this.launch();
+
+  // Updated init per request: launch if needed, load session, go to PokerNow, check login
+  async init(): Promise<boolean> {
+    try {
+      if (!this.browser) {
+        await this.launch();
+      }
+      if (!this.page) {
+        this.page = await this.browser!.newPage();
+      }
+
+      // Load session (cookies/localStorage/sessionStorage) if available
+      await this.loadSession();
+
+      // Navigate to PokerNow homepage if not already there
+      const targetUrl = 'https://www.pokernow.club/';
+      const currentUrl = this.page.url();
+      if (!currentUrl.startsWith(targetUrl)) {
+        await this.page.goto(targetUrl, { waitUntil: 'load', timeout: 60000 });
+      }
+
+      // After loading, verify login state
+      const loggedIn = await this.isLoggedIn();
+      if (!loggedIn) {
+        console.log('[PuppeteerService] Not logged in to PokerNow. Manual login may be required.');
+        return false; // preserve manual login flow by not throwing
+      }
+
+      return true;
+    } catch (err) {
+      console.error('Error during init:', err);
+      return false;
     }
   }
+
   async launch(): Promise<void> {
     this.browser = await puppeteer.launch({
       headless: false,
@@ -36,11 +68,13 @@ export class PuppeteerService {
     });
     this.page = await this.browser.newPage();
   }
+
   async close(): Promise<void> {
     if (this.browser) {
       await this.browser.close();
     }
   }
+
   async loadSession(): Promise<void> {
     if (!this.page) {
       console.error('Browser page not initialized');
@@ -58,6 +92,7 @@ export class PuppeteerService {
       } catch (error) {
         console.error('Error loading cookies:', error);
       }
+
       // Load localStorage
       try {
         const localStorageData = await fs.readFile('localStorage.json', 'utf8');
@@ -73,6 +108,7 @@ export class PuppeteerService {
       } catch (error) {
         console.error('Error loading localStorage:', error);
       }
+
       // Load sessionStorage
       try {
         const sessionStorageData = await fs.readFile('sessionStorage.json', 'utf8');
@@ -92,6 +128,7 @@ export class PuppeteerService {
       console.error('Error loading session:', error);
     }
   }
+
   async saveSession(): Promise<void> {
     if (!this.page) {
       console.error('Browser page not initialized');
@@ -106,6 +143,7 @@ export class PuppeteerService {
       } catch (error) {
         console.error('Error saving cookies:', error);
       }
+
       // Save localStorage
       try {
         const localStorage = await this.page.evaluate(() => {
@@ -123,6 +161,7 @@ export class PuppeteerService {
       } catch (error) {
         console.error('Error saving localStorage:', error);
       }
+
       // Save sessionStorage
       try {
         const sessionStorage = await this.page.evaluate(() => {
@@ -144,6 +183,7 @@ export class PuppeteerService {
       console.error('Error saving session:', error);
     }
   }
+
   async navigateToGame(gameId: string): Promise<boolean> {
     if (!gameId) {
       console.error('No gameId provided to navigateToGame');
@@ -164,10 +204,12 @@ export class PuppeteerService {
       return false;
     }
   }
+
   private pickPokerFrame(): puppeteer.Frame | puppeteer.Page {
     // Implementation to pick the appropriate frame or page
     return this.page as puppeteer.Page;
   }
+
   // New: check if logged in on PokerNow by presence of logout/sign-out element
   async isLoggedIn(): Promise<boolean> {
     if (!this.page) return false;
@@ -189,12 +231,11 @@ export class PuppeteerService {
       return false;
     }
   }
+
   async getTableState(): Promise<GameState | null> {
     const pokerFrame = this.pickPokerFrame();
-
     // Get hero name from Node environment or config
     const heroName = process.env.HERO_NAME || '';
-
     try {
       return await (pokerFrame as puppeteer.Frame | puppeteer.Page).evaluate((heroNameArg: string) => {
         const parseValue = (text: string | null | undefined): number => {
@@ -235,7 +276,6 @@ export class PuppeteerService {
             const seat = parseInt(el.getAttribute('data-seat') || '0', 10);
             const name = (el.querySelector('.table-player-name') as HTMLElement)?.innerText?.trim() || '';
             if (!name) return null;
-
             const isSelf = el.classList.contains('you-player');
             const isCurrentTurn = !!el.querySelector('.decision-current');
             const isFolded = el.classList.contains('folded');
@@ -338,7 +378,6 @@ export class PuppeteerService {
 
         // Use the hero name passed as argument
         const heroNameNormalized = (heroNameArg || '').trim().toLowerCase();
-
         // If hero name provided, align isSelf based on heroNameArg (in case .you-player missing)
         if (heroNameNormalized) {
           for (const p of players) {
@@ -358,14 +397,14 @@ export class PuppeteerService {
         const hero = players.find((p) => p.isSelf) || null;
         const heroCards = hero ? hero.holeCards : [];
 
-        return { 
-          players, 
-          communityCards, 
-          pot, 
-          actionTurn, 
-          heroCards, 
-          blinds, 
-          actionButtons 
+        return {
+          players,
+          communityCards,
+          pot,
+          actionTurn,
+          heroCards,
+          blinds,
+          actionButtons,
         } as any;
       }, heroName);
     } catch (error) {
