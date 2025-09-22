@@ -193,13 +193,9 @@ export class PuppeteerService {
         });
         
         // Use the hero name passed as argument
-        let heroNameNormalized = (heroNameArg || '').trim().toLowerCase();
-        if (!heroNameNormalized) {
-          const selfEl = document.querySelector('.table-player.you-player .table-player-name') as HTMLElement | null;
-          heroNameNormalized = (selfEl?.innerText || '').trim().toLowerCase();
-        }
+        const heroNameNormalized = (heroNameArg || '').trim().toLowerCase();
         
-        // If hero name provided, align isSelf based on name (in case .you-player missing)
+        // If hero name provided, align isSelf based on heroNameArg (in case .you-player missing)
         if (heroNameNormalized) {
           for (const p of players) {
             if ((p.name || '').trim().toLowerCase() === heroNameNormalized) {
