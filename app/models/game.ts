@@ -1,7 +1,7 @@
-import { Hero } from "./player.ts";
-import { Player } from "./player.ts";
-import { PlayerStats } from "./player-stats.ts";
-import { Table } from "./table.ts";
+import { Hero } from "./player";
+import { Player } from "./player";
+import { PlayerStats } from "./player-stats";
+import { Table } from "./table";
 
 export class Game {
     private game_id: string;
