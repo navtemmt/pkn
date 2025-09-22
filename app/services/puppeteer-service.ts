@@ -1,4 +1,5 @@
 import * as puppeteer from 'puppeteer';
+import { promises as fs } from 'fs';
 
 interface GameState {
   players: Array<{
@@ -46,15 +47,128 @@ export class PuppeteerService {
     }
   }
 
+  async loadSession(): Promise<void> {
+    if (!this.page) {
+      console.error('Browser page not initialized');
+      return;
+    }
+
+    try {
+      // Load cookies
+      try {
+        const cookiesData = await fs.readFile('cookies.json', 'utf8');
+        const cookies = JSON.parse(cookiesData);
+        if (Array.isArray(cookies) && cookies.length > 0) {
+          await this.page.setCookie(...cookies);
+          console.log('Cookies loaded successfully');
+        }
+      } catch (error) {
+        console.error('Error loading cookies:', error);
+      }
+
+      // Load localStorage
+      try {
+        const localStorageData = await fs.readFile('localStorage.json', 'utf8');
+        const localStorage = JSON.parse(localStorageData);
+        if (localStorage && typeof localStorage === 'object') {
+          await this.page.evaluateOnNewDocument((data) => {
+            for (const [key, value] of Object.entries(data)) {
+              window.localStorage.setItem(key, value as string);
+            }
+          }, localStorage);
+          console.log('LocalStorage loaded successfully');
+        }
+      } catch (error) {
+        console.error('Error loading localStorage:', error);
+      }
+
+      // Load sessionStorage
+      try {
+        const sessionStorageData = await fs.readFile('sessionStorage.json', 'utf8');
+        const sessionStorage = JSON.parse(sessionStorageData);
+        if (sessionStorage && typeof sessionStorage === 'object') {
+          await this.page.evaluateOnNewDocument((data) => {
+            for (const [key, value] of Object.entries(data)) {
+              window.sessionStorage.setItem(key, value as string);
+            }
+          }, sessionStorage);
+          console.log('SessionStorage loaded successfully');
+        }
+      } catch (error) {
+        console.error('Error loading sessionStorage:', error);
+      }
+    } catch (error) {
+      console.error('Error loading session:', error);
+    }
+  }
+
+  async saveSession(): Promise<void> {
+    if (!this.page) {
+      console.error('Browser page not initialized');
+      return;
+    }
+
+    try {
+      // Save cookies
+      try {
+        const cookies = await this.page.cookies();
+        await fs.writeFile('cookies.json', JSON.stringify(cookies, null, 2));
+        console.log('Cookies saved successfully');
+      } catch (error) {
+        console.error('Error saving cookies:', error);
+      }
+
+      // Save localStorage
+      try {
+        const localStorage = await this.page.evaluate(() => {
+          const data: { [key: string]: string } = {};
+          for (let i = 0; i < window.localStorage.length; i++) {
+            const key = window.localStorage.key(i);
+            if (key) {
+              data[key] = window.localStorage.getItem(key) || '';
+            }
+          }
+          return data;
+        });
+        await fs.writeFile('localStorage.json', JSON.stringify(localStorage, null, 2));
+        console.log('LocalStorage saved successfully');
+      } catch (error) {
+        console.error('Error saving localStorage:', error);
+      }
+
+      // Save sessionStorage
+      try {
+        const sessionStorage = await this.page.evaluate(() => {
+          const data: { [key: string]: string } = {};
+          for (let i = 0; i < window.sessionStorage.length; i++) {
+            const key = window.sessionStorage.key(i);
+            if (key) {
+              data[key] = window.sessionStorage.getItem(key) || '';
+            }
+          }
+          return data;
+        });
+        await fs.writeFile('sessionStorage.json', JSON.stringify(sessionStorage, null, 2));
+        console.log('SessionStorage saved successfully');
+      } catch (error) {
+        console.error('Error saving sessionStorage:', error);
+      }
+    } catch (error) {
+      console.error('Error saving session:', error);
+    }
+  }
+
   async navigateToGame(gameId: string): Promise<boolean> {
     if (!gameId) {
       console.error('No gameId provided to navigateToGame');
       return false;
     }
+
     try {
       if (!this.page) {
         throw new Error('Browser page not initialized');
       }
+
       await this.page.goto(`https://www.pokernow.club/games/${gameId}`, {
         waitUntil: 'load',
         timeout: 60000,
