@@ -24,7 +24,7 @@ interface GameState {
 export class PuppeteerService {
   private browser: puppeteer.Browser | null = null;
   private page: puppeteer.Page | null = null;
-  // Updated init per request: launch if needed, load session, go to PokerNow, check login
+  // Updated init per request: launch if needed, load session, go to PokerNow, check login with manual prompt fallback
   async init(): Promise<boolean> {
     try {
       if (!this.browser) {
@@ -42,10 +42,30 @@ export class PuppeteerService {
         await this.page.goto(targetUrl, { waitUntil: 'load', timeout: 60000 });
       }
       // After loading, verify login state
-      const loggedIn = await this.isLoggedIn();
+      let loggedIn = await this.isLoggedIn();
       if (!loggedIn) {
-        console.log('[PuppeteerService] Not logged in to PokerNow. Manual login may be required.');
-        return false; // preserve manual login flow by not throwing
+        // Prompt user to manually log in, then wait for Enter
+        console.log('Please log in to PokerNow in the opened browser window, then press Enter here.');
+        await new Promise<void>((resolve) => {
+          const onData = () => {
+            process.stdin.pause();
+            process.stdin.removeListener('data', onData);
+            resolve();
+          };
+          try {
+            // Ensure stdin is in flowing mode
+            if (process.stdin.isPaused()) process.stdin.resume();
+          } catch {}
+          process.stdin.once('data', onData);
+        });
+        // Save new session after manual login
+        await this.saveSession();
+        // Re-check login after user attempt
+        loggedIn = await this.isLoggedIn();
+      }
+      if (!loggedIn) {
+        console.log('[PuppeteerService] Login still not detected after manual attempt.');
+        return false; // only return false if impossible after attempt
       }
       return true;
     } catch (err) {
