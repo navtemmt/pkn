@@ -1,6 +1,5 @@
 import * as puppeteer from 'puppeteer';
 import { promises as fs } from 'fs';
-
 interface GameState {
   players: Array<{
     seat: number;
@@ -22,11 +21,9 @@ interface GameState {
   blinds: number[];
   actionButtons: string[];
 }
-
 export class PuppeteerService {
   private browser: puppeteer.Browser | null = null;
   private page: puppeteer.Page | null = null;
-
   // Updated init per request: launch if needed, load session, go to PokerNow, check login
   async init(): Promise<boolean> {
     try {
@@ -36,31 +33,26 @@ export class PuppeteerService {
       if (!this.page) {
         this.page = await this.browser!.newPage();
       }
-
       // Load session (cookies/localStorage/sessionStorage) if available
       await this.loadSession();
-
       // Navigate to PokerNow homepage if not already there
       const targetUrl = 'https://www.pokernow.club/';
       const currentUrl = this.page.url();
       if (!currentUrl.startsWith(targetUrl)) {
         await this.page.goto(targetUrl, { waitUntil: 'load', timeout: 60000 });
       }
-
       // After loading, verify login state
       const loggedIn = await this.isLoggedIn();
       if (!loggedIn) {
         console.log('[PuppeteerService] Not logged in to PokerNow. Manual login may be required.');
         return false; // preserve manual login flow by not throwing
       }
-
       return true;
     } catch (err) {
       console.error('Error during init:', err);
       return false;
     }
   }
-
   async launch(): Promise<void> {
     this.browser = await puppeteer.launch({
       headless: false,
@@ -68,13 +60,11 @@ export class PuppeteerService {
     });
     this.page = await this.browser.newPage();
   }
-
   async close(): Promise<void> {
     if (this.browser) {
       await this.browser.close();
     }
   }
-
   async loadSession(): Promise<void> {
     if (!this.page) {
       console.error('Browser page not initialized');
@@ -92,7 +82,6 @@ export class PuppeteerService {
       } catch (error) {
         console.error('Error loading cookies:', error);
       }
-
       // Load localStorage
       try {
         const localStorageData = await fs.readFile('localStorage.json', 'utf8');
@@ -108,7 +97,6 @@ export class PuppeteerService {
       } catch (error) {
         console.error('Error loading localStorage:', error);
       }
-
       // Load sessionStorage
       try {
         const sessionStorageData = await fs.readFile('sessionStorage.json', 'utf8');
@@ -128,7 +116,6 @@ export class PuppeteerService {
       console.error('Error loading session:', error);
     }
   }
-
   async saveSession(): Promise<void> {
     if (!this.page) {
       console.error('Browser page not initialized');
@@ -143,7 +130,6 @@ export class PuppeteerService {
       } catch (error) {
         console.error('Error saving cookies:', error);
       }
-
       // Save localStorage
       try {
         const localStorage = await this.page.evaluate(() => {
@@ -161,7 +147,6 @@ export class PuppeteerService {
       } catch (error) {
         console.error('Error saving localStorage:', error);
       }
-
       // Save sessionStorage
       try {
         const sessionStorage = await this.page.evaluate(() => {
@@ -183,7 +168,6 @@ export class PuppeteerService {
       console.error('Error saving session:', error);
     }
   }
-
   async navigateToGame(gameId: string): Promise<boolean> {
     if (!gameId) {
       console.error('No gameId provided to navigateToGame');
@@ -204,12 +188,10 @@ export class PuppeteerService {
       return false;
     }
   }
-
   private pickPokerFrame(): puppeteer.Frame | puppeteer.Page {
     // Implementation to pick the appropriate frame or page
     return this.page as puppeteer.Page;
   }
-
   // New: check if logged in on PokerNow by presence of logout/sign-out element
   async isLoggedIn(): Promise<boolean> {
     if (!this.page) return false;
@@ -231,7 +213,6 @@ export class PuppeteerService {
       return false;
     }
   }
-
   async getTableState(): Promise<GameState | null> {
     const pokerFrame = this.pickPokerFrame();
     // Get hero name from Node environment or config
@@ -243,7 +224,6 @@ export class PuppeteerService {
           const num = parseFloat((text || '').replace(/[^0-9.]/g, ''));
           return isNaN(num) ? 0 : num;
         };
-
         // Dealer seat detection via dealer button
         const dealerButtonElement = document.querySelector('.dealer-button-ctn .button');
         let dealerSeat = -1;
@@ -256,7 +236,6 @@ export class PuppeteerService {
             if (!Number.isNaN(parsed)) dealerSeat = parsed;
           }
         }
-
         type P = {
           seat: number;
           name: string;
@@ -270,7 +249,6 @@ export class PuppeteerService {
           holeCards: string[];
           status: string;
         };
-
         const players = Array.from(document.querySelectorAll('.table-player'))
           .map((el) => {
             const seat = parseInt(el.getAttribute('data-seat') || '0', 10);
@@ -280,7 +258,6 @@ export class PuppeteerService {
             const isCurrentTurn = !!el.querySelector('.decision-current');
             const isFolded = el.classList.contains('folded');
             const isAllIn = el.classList.contains('all-in');
-
             // Handle stack with All In check
             let stack = 0;
             const stackEl = el.querySelector('.table-player-stack');
@@ -293,14 +270,11 @@ export class PuppeteerService {
                 stack = parseValue(chipsValue?.innerText);
               }
             }
-
             const betEl = el.querySelector('.table-player-bet-value .chips-value') as HTMLElement;
             const bet = parseValue(betEl?.innerText);
-
             // Player status
             const statusEl = el.querySelector('.table-player-status-icon') as HTMLElement;
             const status = statusEl?.innerText?.trim() || '';
-
             // Hole cards for hero only
             const holeCards: string[] = [];
             if (isSelf) {
@@ -317,7 +291,6 @@ export class PuppeteerService {
                 }
               });
             }
-
             return {
               seat,
               name,
@@ -333,7 +306,6 @@ export class PuppeteerService {
             } as P | null;
           })
           .filter((p): p is P => p !== null);
-
         // Board cards (community cards)
         const communityCards: string[] = [];
         const boardCardElements = document.querySelectorAll('.table-cards .card-container .card');
@@ -348,14 +320,12 @@ export class PuppeteerService {
             }
           }
         });
-
         // Pot detection
         let pot = 0;
         const potEl = document.querySelector('.main-value .normal-value') as HTMLElement;
         if (potEl) {
           pot = parseValue(potEl.textContent);
         }
-
         // Blinds
         const blinds: number[] = [];
         const blindElements = document.querySelectorAll('.blind-value-ctn .normal-value');
@@ -365,7 +335,6 @@ export class PuppeteerService {
             blinds.push(blindValue);
           }
         });
-
         // Action buttons
         const actionButtons: string[] = [];
         const buttonElements = document.querySelectorAll('button.action-button');
@@ -375,28 +344,24 @@ export class PuppeteerService {
             actionButtons.push(buttonText);
           }
         });
-
         // Use the hero name passed as argument
         const heroNameNormalized = (heroNameArg || '').trim().toLowerCase();
         // If hero name provided, align isSelf based on heroNameArg (in case .you-player missing)
         if (heroNameNormalized) {
           for (const p of players) {
-            if ((p.name || '').trim().toLowerCase() === heroNameNormalized) {
+            if ((p.name || '').trim().toLowerCase() === heroNameArg) {
               (p as any).isSelf = true;
             }
           }
         }
-
         // Action turn: check for suspended signal or decision-current on you-player
         let actionTurn = false;
         const suspendedSignal = document.querySelector('.action-signal.suspended');
         const heroDecisionCurrent = document.querySelector('.you-player .decision-current');
         actionTurn = !!(suspendedSignal || heroDecisionCurrent);
-
         // Expose actionTurn and heroCards by augmenting return if consumer widens type later
         const hero = players.find((p) => p.isSelf) || null;
         const heroCards = hero ? hero.holeCards : [];
-
         return {
           players,
           communityCards,
