@@ -1,13 +1,11 @@
 import 'dotenv/config'; // load .env first
 import express from 'express';
-import bot_manager from './bot-manager.ts';
+import bot_manager from './bot-manager';
 // import { once } from 'node:events'; // only if actually used
-// import player_router from './routes/player-routes.ts';
-// import db_service from './services/db-service.ts';
-
+// import player_router from './routes/player-routes';
+// import db_service from './services/db-service';
 // Corrected: Added a closing parenthesis and passed the flag to the bot manager.
 const headless_flag = !process.argv.includes('--no-headless');
-
 const app = express();
 /* const port = 8080;
 app.use(express.json());
@@ -16,16 +14,13 @@ app.get('/', (req: any, res:any) => {
 });
 app.use('/player', player_router);
 */
-
 process.on('unhandledRejection', (reason, p) => {
   console.error('Unhandled Rejection:', reason);
 });
-
 process.on('uncaughtException', (err) => {
   console.error('Uncaught Exception:', err);
   process.exit(1);
 });
-
 async function startServer() {
   // await db_service.init();
   // await db_service.createTables();
@@ -36,7 +31,6 @@ async function startServer() {
     });
   }); */
 }
-
 // Option A: async IIFE with try/catch
 (async () => {
   try {
@@ -48,7 +42,6 @@ async function startServer() {
     process.exit(1);
   }
 })();
-
 // Option B: promise chain (alternative)
 // void startServer()
 //   .then(() => bot_manager(headless_flag))
@@ -56,4 +49,3 @@ async function startServer() {
 //     console.error('Fatal startup error:', err);
 //     process.exit(1);
 //   });
-
