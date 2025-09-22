@@ -1,7 +1,7 @@
 import clipboardy from 'clipboardy';
 import Enquirer from 'enquirer'; // Corrected: Use default import
-import { AIMessage, AIResponse, AIService, BotAction } from "../../interfaces/ai-client-interfaces.ts";
-import { getPromptFromPlaystyle, parseResponse } from "../../helpers/ai-query-helper.ts";
+import { AIMessage, AIResponse, AIService, BotAction } from "../../interfaces/ai-client-interfaces";
+import { getPromptFromPlaystyle, parseResponse } from "../../helpers/ai-query-helper";
 
 export class ManualChatGPTService extends AIService {
     constructor(model_name: string, playstyle: string) {
