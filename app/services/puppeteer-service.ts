@@ -26,6 +26,12 @@ export class PuppeteerService {
   private browser: puppeteer.Browser | null = null;
   private page: puppeteer.Page | null = null;
 
+  async init(): Promise<void> {
+    if (!this.browser) {
+      await this.launch();
+    }
+  }
+
   async launch(): Promise<void> {
     this.browser = await puppeteer.launch({
       headless: false,
