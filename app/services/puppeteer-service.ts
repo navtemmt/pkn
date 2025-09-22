@@ -46,6 +46,27 @@ export class PuppeteerService {
     }
   }
 
+  async navigateToGame(gameId: string): Promise<boolean> {
+    if (!gameId) {
+      console.error('No gameId provided to navigateToGame');
+      return false;
+    }
+    try {
+      if (!this.page) {
+        throw new Error('Browser page not initialized');
+      }
+      await this.page.goto(`https://www.pokernow.club/games/${gameId}`, {
+        waitUntil: 'load',
+        timeout: 60000,
+      });
+      await this.page.setViewport({ width: 1280, height: 800 });
+      return true;
+    } catch (err) {
+      console.error('Failed to open game:', err);
+      return false;
+    }
+  }
+
   private pickPokerFrame(): puppeteer.Frame | puppeteer.Page {
     // Implementation to pick the appropriate frame or page
     return this.page as puppeteer.Page;
