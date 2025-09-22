@@ -1,21 +1,16 @@
-import { Player } from "./player.ts"
-import { PlayerAction } from "./player-action.ts";
-import { PlayerStats } from "./player-stats.ts";
-
-import { PlayerService } from "../services/player-service.ts";
-
-import { Queue } from "../utils/data-structures.ts"
-import { getPlayerStacksMsg, getIdToInitialStackFromMsg as getPlayerInitialStacksFromMsg } from "../utils/message-processing-utils.ts";
-
+import { Player } from "./player"
+import { PlayerAction } from "./player-action";
+import { PlayerStats } from "./player-stats";
+import { PlayerService } from "../services/player-service";
+import { Queue } from "../utils/data-structures"
+import { getPlayerStacksMsg, getIdToInitialStackFromMsg as getPlayerInitialStacksFromMsg } from "../utils/message-processing-utils";
 export class Table {
     private player_service: PlayerService;
-
     private num_players: number;
     private players_in_pot: number;
     private pot_size_in_BBs: number;
     private runout: string;
     private street: string;
-
     private logs_queue: Queue<Array<string>>;
     private player_actions: Array<PlayerAction>;
     
@@ -24,23 +19,18 @@ export class Table {
     private id_to_position: Map<string, string>;
     private id_to_table_seat: Map<string, number>;
     private table_seat_to_id: Map<number, string>;
-
     private id_to_name: Map<string, string>;
     private name_to_id: Map<string, string>;
     private name_to_player: Map<string, Player>;
-
     private first_seat_order_id: string;
     
-
     constructor(player_service: PlayerService) {
         this.player_service = player_service;
-
         this.num_players = 0;
         this.players_in_pot = 0;
         this.pot_size_in_BBs = 0;
         this.runout = "";
         this.street = "";
-
         this.logs_queue = new Queue();
         this.player_actions = new Array<PlayerAction>;
         
@@ -56,14 +46,12 @@ export class Table {
         
         this.first_seat_order_id = "";
     }
-
     public getNumPlayers(): number {
         return this.num_players;
     }
     public setNumPlayers(num_players: number): void {
         this.num_players = num_players;
     }
-
     public getPlayersInPot(): number {
         return this.players_in_pot;
     }
@@ -73,31 +61,24 @@ export class Table {
     public decrementPlayersInPot(): void {
         this.players_in_pot -= 1;
     } 
-
     public getPot(): number {
         return this.pot_size_in_BBs;
     }
     public setPot(pot: number): void {
         this.pot_size_in_BBs = pot;
     }
-
-
     public getRunout(): string {
         return this.runout;
     }
     public setRunout(runout: string): void {
         this.runout = runout;
     }
-
-
     public getStreet(): string {
         return this.street;
     }
     public setStreet(street: string): void {
         this.street = street;
     }
-
-
     public getLogsQueue(): Queue<Array<string>> {
         return this.logs_queue;
     }
@@ -111,7 +92,6 @@ export class Table {
         }
         return undefined;
     }
-
     public getPlayerActions(): Array<PlayerAction> {
         return this.player_actions;
     }
@@ -121,7 +101,6 @@ export class Table {
     public resetPlayerActions(): void {
         this.player_actions = new Array<PlayerAction>();
     }
-
     public getIdToActionNum(): Map<string, number> {
         return this.id_to_action_num;
     }
@@ -163,7 +142,6 @@ export class Table {
             }
         }
     }
-
     public getPlayerInitialStacks(): Map<string, number> {
         return this.id_to_initial_stacks;
     }
@@ -180,7 +158,6 @@ export class Table {
     public setPlayerInitialStacksFromMsg(msgs: string[], stakes: number): void {
         this.id_to_initial_stacks = getPlayerInitialStacksFromMsg(getPlayerStacksMsg(msgs), stakes);
     }
-
     public getPlayerPositions(): Map<string, string> {
         return this.id_to_position;
     }
@@ -251,7 +228,6 @@ export class Table {
         }
         return "";
     }
-
     public getSeatNumberFromId(player_id: string): number {
         const seat_number = this.id_to_table_seat.get(player_id);
         if (seat_number !== undefined) {
@@ -262,14 +238,12 @@ export class Table {
     public setIdToTableSeat(map: Map<string, number>): void {
         this.id_to_table_seat = map;
     }
-
     public getSeatNumberToId(): Map<number, string> {
         return this.table_seat_to_id;
     }
     public setTableSeatToId(map: Map<number, string>): void {
         this.table_seat_to_id = map;
     }
-
     public getNameFromId(player_id: string): string {
         const player_name = this.id_to_name.get(player_id);
         if (player_name !== undefined) {
@@ -280,7 +254,6 @@ export class Table {
     public setIdToName(map: Map<string, string>): void {
         this.id_to_name = map;
     }
-
     public getIdFromName(player_name: string): string {
         const player_id = this.name_to_id.get(player_name);
         if (player_id !== undefined) {
@@ -291,7 +264,6 @@ export class Table {
     public setNameToId(map: Map<string, string>): void {
         this.name_to_id = map;
     }
-
     public getPlayerCache(): Map<string, Player> {
         return this.name_to_player;
     }
@@ -324,24 +296,20 @@ export class Table {
             }
         }
     }
-
     public getFirstSeatOrderId(): string {
         return this.first_seat_order_id;
     }
     public setFirstSeatOrderId(first_seat_order_id: string): void {
         this.first_seat_order_id = first_seat_order_id;
     }
-
     public nextHand(): void {
         this.num_players = 0;
         this.players_in_pot = 0;
         this.pot_size_in_BBs = 0;
         this.runout = "";
         this.street = "";
-
-        this.logs_queue = new Queue<string[]>();
+        this.logs_queue = new Queue<string>();
         this.player_actions = new Array<PlayerAction>();
-
         this.id_to_action_num = new Map<string, number>();
         this.id_to_position = new Map<string, string>();
         this.id_to_initial_stacks = new Map<string, number>();
