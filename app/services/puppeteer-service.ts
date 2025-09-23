@@ -213,7 +213,6 @@ export class PuppeteerService {
 
   async getTableState(): Promise<GameState | null> {
     const pokerFrame = this.pickPokerFrame();
-    const heroName = process.env.HERO_NAME || '';
     try {
       return await (pokerFrame as puppeteer.Frame | puppeteer.Page).evaluate((heroNameArg: string) => {
         const __name = 'tzup';
