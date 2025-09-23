@@ -1,7 +1,9 @@
 // app/helpers/ai-service-factory.ts
-import { AIService } from "../interfaces/ai-client-interfaces";
-import { ManualChatGPTService } from "../services/ai/manual-chatgpt-service";
+
+import { AIService } from "../interfaces/ai-client-interfaces.ts";
+import { ManualChatGPTService } from "../services/ai/manual-chatgpt-service.ts";
 // Note: Imports for GoogleAIService and OpenAIService have been removed.
+
 export class AIServiceFactory {
     /**
      * Creates and returns an AI service instance.
@@ -22,8 +24,10 @@ export class AIServiceFactory {
         
         const manualService = new ManualChatGPTService(model_name, playstyle);
         console.log("   -> ManualChatGPTService instance created successfully.");
+
         return manualService;
     }
+
     /**
      * This method is kept for compatibility but is no longer relevant in manual mode.
      */

@@ -1,23 +1,29 @@
 // @ts-ignore
 import { rankBoard } from "phe";
-import { Game } from "../models/game";
-import { PlayerAction } from "../models/player-action";
-import { Table } from "../models/table";
+import { Game } from "../models/game.ts";
+import { PlayerAction } from "../models/player-action.ts";
+import { Table } from "../models/table.ts";
+
 export function constructQuery(game: Game): string{
     const table = game.getTable();
+
     const street = table.getStreet();
     const runout = table.getRunout();
+
     const hero_id = game.getHero()!.getPlayerId();
     const hero_name = table.getNameFromId(hero_id);
     const hero_stack = game.getHero()!.getStackSize();
     const hero_position = table.getPlayerPositionFromId(hero_id);
     const hero_cards = game.getHero()!.getHand();
+
     const players_in_pot = table.getPlayersInPot();
     const player_stacks = table.getPlayerInitialStacks();
     const pot_size = table.getPot();
     const player_actions = table.getPlayerActions();
     const player_positions = table.getPlayerPositions();
+
     let query = "";
+
     query = query.concat(defineObjective(hero_position, hero_stack), '\n');
     query = query.concat(defineGameState(street, players_in_pot), '\n');
     query = query.concat(defineCommunityCards(street, runout), '\n')
@@ -29,14 +35,18 @@ export function constructQuery(game: Game): string{
     query = query.concat(defineActions(player_actions, table), '\n');
     query = query.concat(defineStats(player_positions, table, hero_name), '\n');
     query = query.concat(defineOutput());
+
     return query;
 }
+
 function defineObjective(position: string, stack_size: number): string {
     return `Help me decide my action in No Limit Hold'em poker. I'm in the ${position} position with a stack size of ${stack_size} BB.`;
 }
+
 function defineGameState(street: string, players_in_pot: number): string {
     return `It is ${players_in_pot}-handed, and the current street is: ${street ? street : "preflop"}.`
 }
+
 function defineCommunityCards(street: string, runout: string): string {
     let query;
     if (street && runout) {
@@ -46,9 +56,11 @@ function defineCommunityCards(street: string, runout: string): string {
     }
     return query;
 }
+
 function defineHand(hero_cards: string[]): string {
     return `My hole cards are: ${hero_cards.join(", ")}`;
 }
+
 export function defineRank(street: string, runout: string, hero_cards: string[]): string {
     if (!street) {
         return '';
@@ -87,6 +99,7 @@ export function defineRank(street: string, runout: string, hero_cards: string[])
     }
     return query;
 }
+
 function convertRunoutToCards(runout: string): string[] {
     const re = RegExp(/([JQKA]|10|[1-9])([shdc])/, 'g');
     const res = new Array<string>;
@@ -98,6 +111,7 @@ function convertRunoutToCards(runout: string): string[] {
     });
     return res;
 }
+
 function replaceTenWithLetter(cards: string[]): string[] {
     return cards.map((card) => {
         if (card.length === 3) {
@@ -106,6 +120,7 @@ function replaceTenWithLetter(cards: string[]): string[] {
         return card;
     });
 }
+
 function defineStacks(player_stacks: Map<string, number>, player_positions: Map<string, string>, hero_id: string): string {
     let query = "Here are the initial stack sizes of the other players in the pot, defined in the format {position: stack_size_in_BBs}:\n";
     const player_ids = Array.from(player_positions.keys());
@@ -123,9 +138,11 @@ function defineStacks(player_stacks: Map<string, number>, player_positions: Map<
     }
     return query;
 }
+
 function definePotSize(pot_size_in_BBs: number): string {
     return `The current pot size before any actions were made in the street is ${pot_size_in_BBs} BB.`;
 }
+
 function defineActions(player_actions: Array<PlayerAction>, table: Table): string {
     let query = "Here are the previous actions in this street, defined in the format {position action bet_size_in_BBs}:\n";
     for (var i = 0; i < player_actions.length; i++)  {
@@ -139,9 +156,11 @@ function defineActions(player_actions: Array<PlayerAction>, table: Table): strin
     }
     return query
 }
+
 function defineStats(player_positions: Map<string, string>, table: Table, hero_name: string): string {
     let query = "Here are the stats of the other players in the pot, defined in the format {position: Total Hands Played = total_hands, VPIP = vpip_stat, PFR = pfr_stat}:\n"
     let player_ids = Array.from(player_positions.keys());
+
     for (var i = 0; i < player_ids.length; i++)  {
         const player_id = player_ids[i];
         const player_name = table.getNameFromId(player_id);
@@ -158,6 +177,7 @@ function defineStats(player_positions: Map<string, string>, table: Table, hero_n
     }
     return query;
 }
+
 function defineOutput(): string {
     return "Do not provide an explanation, respond in this format: {action, bet_size_in_BBs BB}";
 }

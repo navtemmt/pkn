@@ -2,11 +2,12 @@ import 'dotenv/config';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
-import { Bot } from './bot';
-import { PuppeteerService } from './services/puppeteer-service';
-import { AIConfig, BotConfig, WebDriverConfig } from './interfaces/config-interfaces';
-import { AIServiceFactory } from './helpers/ai-service-factory';
-import { DebugMode } from './utils/error-handling-utils';
+
+import { Bot } from './bot.ts';
+import { PuppeteerService } from './services/puppeteer-service.ts';
+import { AIConfig, BotConfig, WebDriverConfig } from './interfaces/config-interfaces.ts';
+import { AIServiceFactory } from './helpers/ai-service-factory.ts';
+import { DebugMode } from './utils/error-handling-utils.ts';
 
 // Resolve __dirname in ESM
 const __filename = fileURLToPath(import.meta.url);

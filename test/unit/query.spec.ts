@@ -1,17 +1,17 @@
-import { Game } from "../../app/models/game";
-import { Hero } from "../../app/models/player";
-import { PlayerStats } from "../../app/models/player-stats";
-import { Table } from "../../app/models/table";
+import { Game } from "../../app/models/game.ts";
+import { Hero } from "../../app/models/player.ts";
+import { PlayerStats } from "../../app/models/player-stats.ts";
+import { Table } from "../../app/models/table.ts";
 
-import { DBService } from "../../app/services/db-service";
-import { LogService } from "../../app/services/log-service"
-import { OpenAIService } from '../../app/services/ai/openai-service';
-import { PlayerService } from "../../app/services/player-service";
+import { DBService } from "../../app/services/db-service.ts";
+import { LogService } from "../../app/services/log-service.ts"
+import { OpenAIService } from '../../app/services/ai/openai-service.ts';
+import { PlayerService } from "../../app/services/player-service.ts";
 
-import { SUCCESS_RESPONSE, ERROR_RESPONSE} from '../../app/utils/error-handling-utils';
-import { postProcessLogs, postProcessLogsAfterHand, preProcessLogs } from "../../app/utils/log-processing-utils";
-import { validateAllMsg } from "../../app/utils/message-processing-utils";
-import { defineRank } from "../../app/helpers/construct-query-helper";
+import { SUCCESS_RESPONSE, ERROR_RESPONSE} from '../../app/utils/error-handling-utils.ts';
+import { postProcessLogs, postProcessLogsAfterHand, preProcessLogs } from "../../app/utils/log-processing-utils.ts";
+import { validateAllMsg } from "../../app/utils/message-processing-utils.ts";
+import { defineRank } from "../../app/helpers/construct-query-helper.ts";
 
 describe('query service test', async () => {
     it("should properly get logs and filter through them", async() => {

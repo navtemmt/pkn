@@ -1,5 +1,5 @@
-import db_service from "../services/db-service";
-import { PlayerService } from "../services/player-service";
+import db_service from "../services/db-service.ts";
+import { PlayerService } from "../services/player-service.ts";
 
 const player_service = new PlayerService(db_service);
 
