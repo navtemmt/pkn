@@ -31,14 +31,17 @@ export class PuppeteerService {
     if (!this.browser) {
       await this.launch();
     }
+
     // Ensure a page exists
     if (!this.page && this.browser) {
       this.page = await this.browser.newPage();
     }
+
     // Try to restore session and check login status (non-fatal if unavailable)
     try {
       await this.loadSession();
     } catch {}
+
     try {
       // Navigate to PokerNow home to allow login detection when possible
       if (this.page) {
@@ -49,6 +52,7 @@ export class PuppeteerService {
         }
       }
     } catch {}
+
     // Soft-check login state; do not throw here to preserve manual login flows
     try {
       const ok = await this.isLoggedIn();
@@ -77,6 +81,7 @@ export class PuppeteerService {
       console.error('Browser page not initialized');
       return;
     }
+
     try {
       // Load cookies
       try {
@@ -89,6 +94,7 @@ export class PuppeteerService {
       } catch (error) {
         console.error('Error loading cookies:', error);
       }
+
       // Load localStorage
       try {
         const localStorageData = await fs.readFile('localStorage.json', 'utf8');
@@ -104,6 +110,7 @@ export class PuppeteerService {
       } catch (error) {
         console.error('Error loading localStorage:', error);
       }
+
       // Load sessionStorage
       try {
         const sessionStorageData = await fs.readFile('sessionStorage.json', 'utf8');
@@ -129,6 +136,7 @@ export class PuppeteerService {
       console.error('Browser page not initialized');
       return;
     }
+
     try {
       // Save cookies
       try {
@@ -138,6 +146,7 @@ export class PuppeteerService {
       } catch (error) {
         console.error('Error saving cookies:', error);
       }
+
       // Save localStorage
       try {
         const localStorage = await this.page.evaluate(() => {
@@ -155,6 +164,7 @@ export class PuppeteerService {
       } catch (error) {
         console.error('Error saving localStorage:', error);
       }
+
       // Save sessionStorage
       try {
         const sessionStorage = await this.page.evaluate(() => {
@@ -242,6 +252,28 @@ export class PuppeteerService {
           console.log('[ACTION-SIGNAL]', actionSignal ? actionSignal.textContent : 'not found');
           console.log('[IS-HERO-TURN]', isHeroTurn);
           
+          // Inline DOM extraction functions
+          const extractHoleCards = () => {
+            const cards = document.querySelectorAll('.hero-cards .card');
+            return Array.from(cards).map(card => card.textContent?.trim() || '');
+          };
+          
+          const extractCommunityCards = () => {
+            const cards = document.querySelectorAll('.community-cards .card');
+            return Array.from(cards).map(card => card.textContent?.trim() || '');
+          };
+          
+          const extractPot = () => {
+            const potElement = document.querySelector('.pot-amount');
+            const potText = potElement?.textContent?.trim() || '0';
+            return parseFloat(potText.replace(/[^\d.-]/g, '')) || 0;
+          };
+          
+          const extractActionButtons = () => {
+            const buttons = document.querySelectorAll('.action-buttons button:not(:disabled)');
+            return Array.from(buttons).map(btn => btn.textContent?.trim() || '');
+          };
+          
           const players = Array.from(document.querySelectorAll('.table-player'))
             .map((el, index) => {
               const nameElement = el.querySelector('.table-player-name a') || 
@@ -287,13 +319,13 @@ export class PuppeteerService {
                 isCurrentTurn,
                 isFolded,
                 isAllIn,
-                holeCards: isSelf ? this.extractHoleCards() : [],
+                holeCards: isSelf ? extractHoleCards() : [],
                 status: isFolded ? 'folded' : (isAllIn ? 'all-in' : 'active')
               };
             });
           
-          const communityCards = this.extractCommunityCards();
-          const pot = this.extractPot();
+          const communityCards = extractCommunityCards();
+          const pot = extractPot();
           
           console.log('[EXTRACTED-STATE]', {
             playersCount: players.length,
@@ -310,7 +342,7 @@ export class PuppeteerService {
             actionTurn: isHeroTurn,
             heroCards: players.find(p => p.isSelf)?.holeCards || [],
             blinds: [0.5, 1], // Default blinds, should be extracted from UI
-            actionButtons: this.extractActionButtons()
+            actionButtons: extractActionButtons()
           };
         } catch (err) {
           console.error('[DEBUG-EVAL-START] Error:', err && err.message);
@@ -327,31 +359,5 @@ export class PuppeteerService {
       console.error('Error capturing table state:', error);
       return null;
     }
-  }
-
-  // Helper methods for extracting game state (to be implemented based on actual DOM structure)
-  private extractHoleCards(): string[] {
-    // This would be implemented based on the actual DOM structure
-    const cards = document.querySelectorAll('.hero-cards .card');
-    return Array.from(cards).map(card => card.textContent?.trim() || '');
-  }
-
-  private extractCommunityCards(): string[] {
-    // This would be implemented based on the actual DOM structure
-    const cards = document.querySelectorAll('.community-cards .card');
-    return Array.from(cards).map(card => card.textContent?.trim() || '');
-  }
-
-  private extractPot(): number {
-    // This would be implemented based on the actual DOM structure
-    const potElement = document.querySelector('.pot-amount');
-    const potText = potElement?.textContent?.trim() || '0';
-    return parseFloat(potText.replace(/[^\d.-]/g, '')) || 0;
-  }
-
-  private extractActionButtons(): string[] {
-    // This would be implemented based on the actual DOM structure
-    const buttons = document.querySelectorAll('.action-buttons button:not(:disabled)');
-    return Array.from(buttons).map(btn => btn.textContent?.trim() || '');
   }
 }
