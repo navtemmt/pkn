@@ -4,7 +4,7 @@ export class PuppeteerService {
   private browser: puppeteer.Browser | null = null;
   private page: puppeteer.Page | null = null;
 
-  async initialize() {
+  async init() {
     this.browser = await puppeteer.launch({
       headless: false,
       args: ['--no-sandbox', '--disable-setuid-sandbox']
@@ -34,50 +34,3 @@ export class PuppeteerService {
           return {
             found: true,
             element: element.className,
-            position: element.getBoundingClientRect(),
-            name: name
-          };
-        }
-      }
-      
-      return { found: false };
-    }, heroNameArg);
-  }
-
-  async performAction(action: string, target?: string) {
-    if (!this.page) throw new Error('Page not initialized');
-    
-    switch (action) {
-      case 'click':
-        if (target) {
-          await this.page.click(target);
-        }
-        break;
-      case 'scroll':
-        await this.page.evaluate(() => {
-          window.scrollBy(0, 100);
-        });
-        break;
-      default:
-        console.log(`Unknown action: ${action}`);
-    }
-  }
-
-  async cleanup() {
-    if (this.browser) {
-      await this.browser.close();
-      this.browser = null;
-      this.page = null;
-    }
-  }
-
-  async waitForElement(selector: string, timeout = 5000) {
-    if (!this.page) throw new Error('Page not initialized');
-    return await this.page.waitForSelector(selector, { timeout });
-  }
-
-  async screenshot(path: string) {
-    if (!this.page) throw new Error('Page not initialized');
-    return await this.page.screenshot({ path, fullPage: true });
-  }
-}
