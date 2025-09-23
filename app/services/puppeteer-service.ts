@@ -240,8 +240,10 @@ export class PuppeteerService {
     const pokerFrame = this.pickPokerFrame();
     // Get hero name from Node environment or config
     const heroName = process.env.HERO_NAME || '';
+    // Node-side logging: input hero name before evaluate
+    console.log('[getTableState] Input heroName:', heroName);
     try {
-      return await (pokerFrame as puppeteer.Frame | puppeteer.Page).evaluate((heroNameArg: string) => {
+      const result = await (pokerFrame as puppeteer.Frame | puppeteer.Page).evaluate((heroNameArg: string) => {
         const parseValue = (text: string | null | undefined): number => {
           if (!text) return 0;
           const num = parseFloat((text || '').replace(/[^0-9.]/g, ''));
@@ -399,9 +401,7 @@ export class PuppeteerService {
           actionButtons,
         } as any;
       }, heroName);
-    } catch (error) {
-      console.error('Error capturing table state:', error);
-      return null;
-    }
-  }
-}
+      // Node-side logging: evaluate returned successfully
+      console.log('[getTableState] Evaluate returned summary:', {
+        playersCount: result?.players?.length,
+        heroCards: result?.heroCards,
