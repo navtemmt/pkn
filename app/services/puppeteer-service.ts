@@ -240,6 +240,7 @@ export class PuppeteerService {
                 name
               };
             });
+          console.log('[PLAYERS-ARRAY]', players);
           return { players };
         } catch (err) {
           console.error('[DEBUG-EVAL-START] Error:', err && err.message);
