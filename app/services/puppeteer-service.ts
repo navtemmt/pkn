@@ -231,8 +231,11 @@ export class PuppeteerService {
     try {
       const result = await (pokerFrame as puppeteer.Frame | puppeteer.Page).evaluate((heroNameArg: string) => {
         try {
-          return { sanity: 'check' };
-        } catch (err: any) {
+          const players = Array.from(document.querySelectorAll('.table-player'))
+            .map(el => ((el.querySelector('.table-player-name a')?.innerText?.trim()) ||
+                      (el.querySelector('.table-player-name')?.innerText?.trim()) || '') ? true : false);
+          return { players };
+        } catch (err) {
           console.error('[DEBUG-EVAL-START] Error:', err && err.message);
           throw err;
         }
