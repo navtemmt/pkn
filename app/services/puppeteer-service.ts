@@ -1,6 +1,5 @@
 import * as puppeteer from 'puppeteer';
 import { promises as fs } from 'fs';
-
 interface GameState {
   players: Array<{
     seat: number;
@@ -22,11 +21,9 @@ interface GameState {
   blinds: number[];
   actionButtons: string[];
 }
-
 export class PuppeteerService {
   private browser: puppeteer.Browser | null = null;
   private page: puppeteer.Page | null = null;
-
   async init(): Promise<boolean> {
     try {
       if (!this.browser) {
@@ -52,7 +49,6 @@ export class PuppeteerService {
       return false;
     }
   }
-
   async launch(): Promise<void> {
     this.browser = await puppeteer.launch({
       headless: false,
@@ -60,13 +56,11 @@ export class PuppeteerService {
     });
     this.page = await this.browser.newPage();
   }
-
   async close(): Promise<void> {
     if (this.browser) {
       await this.browser.close();
     }
   }
-
   async loadSession(): Promise<void> {
     if (!this.page) {
       console.error('Browser page not initialized');
@@ -115,7 +109,6 @@ export class PuppeteerService {
       console.error('Error loading session:', error);
     }
   }
-
   async saveSession(): Promise<void> {
     if (!this.page) {
       console.error('Browser page not initialized');
@@ -165,7 +158,6 @@ export class PuppeteerService {
       console.error('Error saving session:', error);
     }
   }
-
   async navigateToGame(gameId: string): Promise<boolean> {
     if (!gameId) {
       console.error('No gameId provided to navigateToGame');
@@ -186,11 +178,9 @@ export class PuppeteerService {
       return false;
     }
   }
-
   private pickPokerFrame(): puppeteer.Frame | puppeteer.Page {
     return this.page as puppeteer.Page;
   }
-
   async isLoggedIn(): Promise<boolean> {
     if (!this.page) return false;
     try {
@@ -210,13 +200,11 @@ export class PuppeteerService {
       return false;
     }
   }
-
   async getTableState(): Promise<GameState | null> {
     const pokerFrame = this.pickPokerFrame();
     const heroName = 'tzup';
     try {
       return await (pokerFrame as puppeteer.Frame | puppeteer.Page).evaluate((heroNameArg: string) => {
-        const __name = 'tzup';
         const parseValue = (text: string | null | undefined): number => {
           if (!text) return 0;
           const num = parseFloat((text || '').replace(/[^0-9.]/g, ''));
@@ -251,7 +239,7 @@ export class PuppeteerService {
             const seat = parseInt(el.getAttribute('data-seat') || '0', 10);
             const name = (el.querySelector('.table-player-name a')?.innerText?.trim()) || (el.querySelector('.table-player-name')?.innerText?.trim()) || '';
             if (!name) return null;
-            const isSelf = (name || '').trim().toLowerCase() === __name; // debug override
+            const isSelf = (name || '').trim().toLowerCase() === (heroNameArg || '').trim().toLowerCase();
             const isCurrentTurn = !!el.querySelector('.decision-current');
             const isFolded = el.classList.contains('folded');
             const isAllIn = el.classList.contains('all-in');
@@ -334,14 +322,6 @@ export class PuppeteerService {
             actionButtons.push(buttonText);
           }
         });
-        const heroNameNormalized = (heroNameArg || '').trim().toLowerCase();
-        if (heroNameNormalized) {
-          for (const p of players) {
-            if ((p.name || '').trim().toLowerCase() === heroNameNormalized) {
-              (p as any).isSelf = true;
-            }
-          }
-        }
         let actionTurn = false;
         const suspendedSignal = document.querySelector('.action-signal.suspended');
         const heroDecisionCurrent = document.querySelector('.you-player .decision-current');
