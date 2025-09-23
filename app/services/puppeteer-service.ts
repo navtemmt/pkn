@@ -1,6 +1,5 @@
 import * as puppeteer from 'puppeteer';
 import { promises as fs } from 'fs';
-
 interface GameState {
   players: Array<{
     seat: number;
@@ -22,26 +21,21 @@ interface GameState {
   blinds: number[];
   actionButtons: string[];
 }
-
 export class PuppeteerService {
   private browser: puppeteer.Browser | null = null;
   private page: puppeteer.Page | null = null;
-
   async init(): Promise<void> {
     if (!this.browser) {
       await this.launch();
     }
-
     // Ensure a page exists
     if (!this.page && this.browser) {
       this.page = await this.browser.newPage();
     }
-
     // Try to restore session and check login status (non-fatal if unavailable)
     try {
       await this.loadSession();
     } catch {}
-
     try {
       // Navigate to PokerNow home to allow login detection when possible
       if (this.page) {
@@ -52,7 +46,6 @@ export class PuppeteerService {
         }
       }
     } catch {}
-
     // Soft-check login state; do not throw here to preserve manual login flows
     try {
       const ok = await this.isLoggedIn();
@@ -61,7 +54,6 @@ export class PuppeteerService {
       }
     } catch {}
   }
-
   async launch(): Promise<void> {
     this.browser = await puppeteer.launch({
       headless: false,
@@ -69,19 +61,16 @@ export class PuppeteerService {
     });
     this.page = await this.browser.newPage();
   }
-
   async close(): Promise<void> {
     if (this.browser) {
       await this.browser.close();
     }
   }
-
   async loadSession(): Promise<void> {
     if (!this.page) {
       console.error('Browser page not initialized');
       return;
     }
-
     try {
       // Load cookies
       try {
@@ -94,7 +83,6 @@ export class PuppeteerService {
       } catch (error) {
         console.error('Error loading cookies:', error);
       }
-
       // Load localStorage
       try {
         const localStorageData = await fs.readFile('localStorage.json', 'utf8');
@@ -110,7 +98,6 @@ export class PuppeteerService {
       } catch (error) {
         console.error('Error loading localStorage:', error);
       }
-
       // Load sessionStorage
       try {
         const sessionStorageData = await fs.readFile('sessionStorage.json', 'utf8');
@@ -130,13 +117,11 @@ export class PuppeteerService {
       console.error('Error loading session:', error);
     }
   }
-
   async saveSession(): Promise<void> {
     if (!this.page) {
       console.error('Browser page not initialized');
       return;
     }
-
     try {
       // Save cookies
       try {
@@ -146,7 +131,6 @@ export class PuppeteerService {
       } catch (error) {
         console.error('Error saving cookies:', error);
       }
-
       // Save localStorage
       try {
         const localStorage = await this.page.evaluate(() => {
@@ -164,7 +148,6 @@ export class PuppeteerService {
       } catch (error) {
         console.error('Error saving localStorage:', error);
       }
-
       // Save sessionStorage
       try {
         const sessionStorage = await this.page.evaluate(() => {
@@ -186,7 +169,6 @@ export class PuppeteerService {
       console.error('Error saving session:', error);
     }
   }
-
   async navigateToGame(gameId: string): Promise<{ code: string }> {
     if (!gameId) {
       console.error('No gameId provided to navigateToGame');
@@ -207,12 +189,10 @@ export class PuppeteerService {
       return { code: 'error' };
     }
   }
-
   private pickPokerFrame(): puppeteer.Frame | puppeteer.Page {
     // Implementation to pick the appropriate frame or page
     return this.page as puppeteer.Page;
   }
-
   // Added: login state detection helper
   async isLoggedIn(): Promise<boolean> {
     if (!this.page) return false;
@@ -234,70 +214,105 @@ export class PuppeteerService {
     }
   }
 
+  // Helper to reliably extract player names outside evaluate
+  private async extractPlayersOutside(): Promise<string[]> {
+    const pokerFrame = this.pickPokerFrame();
+    try {
+      const names = await (pokerFrame as puppeteer.Frame | puppeteer.Page).evaluate(() => {
+        const list = Array.from(document.querySelectorAll('.table-player'))
+          .map((el) => {
+            const nameElement = (el.querySelector('.table-player-name a') || el.querySelector('.table-player-name')) as HTMLElement | null;
+            return (nameElement?.textContent || '').trim();
+          })
+          .filter(Boolean) as string[];
+        return list;
+      });
+      return names;
+    } catch (e) {
+      console.error('Error extracting players outside evaluate:', e);
+      return [];
+    }
+  }
+
   async getTableState(): Promise<GameState | null> {
     const pokerFrame = this.pickPokerFrame();
-    // Get hero name from Node environment or config
-    const heroName = process.env.HERO_NAME || '';
-    
+
+    // 1) Extract player list outside .evaluate and pick hero name
+    let heroName = process.env.HERO_NAME || '';
+    try {
+      const players = await this.extractPlayersOutside();
+      // Prefer an exact match with HERO_NAME if provided; otherwise pick the first non-empty
+      if (players && players.length > 0) {
+        if (heroName) {
+          const exact = players.find((p) => p === heroName);
+          heroName = exact || players[0];
+        } else {
+          heroName = players[0];
+        }
+      }
+    } catch (e) {
+      console.error('Failed to extract players outside evaluate:', e);
+    }
+
     try {
       const result = await (pokerFrame as puppeteer.Frame | puppeteer.Page).evaluate((heroNameArg: string) => {
         try {
           console.log('[HERO-NAME-ARG]', heroNameArg);
-          
+
           // Check for action signal to detect if it's hero's turn
           const actionSignal = document.querySelector('p.action-signal');
-          const isHeroTurn = actionSignal && actionSignal.textContent && 
+          const isHeroTurn = actionSignal && actionSignal.textContent &&
             actionSignal.textContent.trim().toUpperCase() === 'YOUR TURN';
-          
+
           console.log('[ACTION-SIGNAL]', actionSignal ? actionSignal.textContent : 'not found');
           console.log('[IS-HERO-TURN]', isHeroTurn);
-          
+
           // Inline DOM extraction functions
           const extractHoleCards = () => {
             const cards = document.querySelectorAll('.hero-cards .card');
             return Array.from(cards).map(card => card.textContent?.trim() || '');
           };
-          
+
           const extractCommunityCards = () => {
             const cards = document.querySelectorAll('.community-cards .card');
             return Array.from(cards).map(card => card.textContent?.trim() || '');
           };
-          
+
           const extractPot = () => {
             const potElement = document.querySelector('.pot-amount');
             const potText = potElement?.textContent?.trim() || '0';
             return parseFloat(potText.replace(/[^\d.-]/g, '')) || 0;
           };
-          
+
           const extractActionButtons = () => {
             const buttons = document.querySelectorAll('.action-buttons button:not(:disabled)');
             return Array.from(buttons).map(btn => btn.textContent?.trim() || '');
           };
-          
+
           const players = Array.from(document.querySelectorAll('.table-player'))
             .map((el, index) => {
-              const nameElement = el.querySelector('.table-player-name a') || 
+              const nameElement = el.querySelector('.table-player-name a') ||
                                 el.querySelector('.table-player-name');
               const name = nameElement?.textContent?.trim() || '';
-              
+
               const stackElement = el.querySelector('.table-player-stack');
               const stackText = stackElement?.textContent?.trim() || '0';
               const stack = parseFloat(stackText.replace(/[^\d.-]/g, '')) || 0;
-              
+
               const betElement = el.querySelector('.table-player-bet');
               const betText = betElement?.textContent?.trim() || '0';
               const bet = parseFloat(betText.replace(/[^\d.-]/g, '')) || 0;
-              
+
               const isSelf = name === heroNameArg;
               const isDealer = !!el.querySelector('.dealer-button');
-              const isFolded = el.classList.contains('folded') || 
+              const isFolded = el.classList.contains('folded') ||
                              !!el.querySelector('.folded');
-              const isAllIn = el.classList.contains('all-in') || 
+              const isAllIn = el.classList.contains('all-in') ||
                             !!el.querySelector('.all-in');
-              
+
               // Only set isCurrentTurn for hero if action signal is present
               const isCurrentTurn = isSelf && isHeroTurn;
-              
+
               console.log(`[PLAYER-${index}]`, {
                 name,
                 isSelf,
@@ -308,7 +323,7 @@ export class PuppeteerService {
                 isFolded,
                 isAllIn
               });
-              
+
               return {
                 seat: index + 1,
                 name,
@@ -323,10 +338,10 @@ export class PuppeteerService {
                 status: isFolded ? 'folded' : (isAllIn ? 'all-in' : 'active')
               };
             });
-          
+
           const communityCards = extractCommunityCards();
           const pot = extractPot();
-          
+
           console.log('[EXTRACTED-STATE]', {
             playersCount: players.length,
             heroFound: players.some(p => p.isSelf),
@@ -334,7 +349,7 @@ export class PuppeteerService {
             communityCardsCount: communityCards.length,
             pot
           });
-          
+
           return {
             players,
             communityCards,
@@ -345,15 +360,15 @@ export class PuppeteerService {
             actionButtons: extractActionButtons()
           };
         } catch (err) {
-          console.error('[DEBUG-EVAL-START] Error:', err && err.message);
+          console.error('[DEBUG-EVAL-START] Error:', err && (err as any).message);
           throw err;
         }
       }, heroName);
-      
-      console.log('Node: Extracted players:', (result.players || []).map(p => 
+
+      console.log('Node: Extracted players:', (result.players || []).map(p =>
         `${p.name}${p.isSelf ? ' (HERO)' : ''}${p.isCurrentTurn ? ' (TURN)' : ''}`
       ));
-      
+
       return result as GameState;
     } catch (error) {
       console.error('Error capturing table state:', error);
