@@ -31,17 +31,14 @@ export class PuppeteerService {
     if (!this.browser) {
       await this.launch();
     }
-
     // Ensure a page exists
     if (!this.page && this.browser) {
       this.page = await this.browser.newPage();
     }
-
     // Try to restore session and check login status (non-fatal if unavailable)
     try {
       await this.loadSession();
     } catch {}
-
     try {
       // Navigate to PokerNow home to allow login detection when possible
       if (this.page) {
@@ -52,7 +49,6 @@ export class PuppeteerService {
         }
       }
     } catch {}
-
     // Soft-check login state; do not throw here to preserve manual login flows
     try {
       const ok = await this.isLoggedIn();
@@ -81,7 +77,6 @@ export class PuppeteerService {
       console.error('Browser page not initialized');
       return;
     }
-
     try {
       // Load cookies
       try {
@@ -94,7 +89,6 @@ export class PuppeteerService {
       } catch (error) {
         console.error('Error loading cookies:', error);
       }
-
       // Load localStorage
       try {
         const localStorageData = await fs.readFile('localStorage.json', 'utf8');
@@ -110,7 +104,6 @@ export class PuppeteerService {
       } catch (error) {
         console.error('Error loading localStorage:', error);
       }
-
       // Load sessionStorage
       try {
         const sessionStorageData = await fs.readFile('sessionStorage.json', 'utf8');
@@ -136,7 +129,6 @@ export class PuppeteerService {
       console.error('Browser page not initialized');
       return;
     }
-
     try {
       // Save cookies
       try {
@@ -146,7 +138,6 @@ export class PuppeteerService {
       } catch (error) {
         console.error('Error saving cookies:', error);
       }
-
       // Save localStorage
       try {
         const localStorage = await this.page.evaluate(() => {
@@ -164,7 +155,6 @@ export class PuppeteerService {
       } catch (error) {
         console.error('Error saving localStorage:', error);
       }
-
       // Save sessionStorage
       try {
         const sessionStorage = await this.page.evaluate(() => {
@@ -192,17 +182,14 @@ export class PuppeteerService {
       console.error('No gameId provided to navigateToGame');
       return false;
     }
-
     try {
       if (!this.page) {
         throw new Error('Browser page not initialized');
       }
-
       await this.page.goto(`https://www.pokernow.club/games/${gameId}`, {
         waitUntil: 'load',
         timeout: 60000,
       });
-
       await this.page.setViewport({ width: 1280, height: 800 });
       return true;
     } catch (err) {
@@ -219,7 +206,6 @@ export class PuppeteerService {
   // Added: login state detection helper
   async isLoggedIn(): Promise<boolean> {
     if (!this.page) return false;
-
     try {
       const hasSignOut = await this.page.evaluate(() => {
         const selectors = [
@@ -231,7 +217,6 @@ export class PuppeteerService {
         ];
         return selectors.some((sel) => !!document.querySelector(sel));
       });
-
       return !!hasSignOut;
     } catch (e) {
       console.error('Error checking login status:', e);
@@ -241,25 +226,26 @@ export class PuppeteerService {
 
   async getTableState(): Promise<GameState | null> {
     const pokerFrame = this.pickPokerFrame();
-
     // Get hero name from Node environment or config
     const heroName = process.env.HERO_NAME || '';
-
     try {
       const result = await (pokerFrame as puppeteer.Frame | puppeteer.Page).evaluate((heroNameArg: string) => {
         try {
           const players = Array.from(document.querySelectorAll('.table-player'))
-            .map(el => ({
-              name: (el.querySelector('.table-player-name a')?.innerText?.trim()) ||
-                    (el.querySelector('.table-player-name')?.innerText?.trim()) || ''
-            }));
+            .map(el => {
+              const name = (el.querySelector('.table-player-name a')?.innerText?.trim()) ||
+                          (el.querySelector('.table-player-name')?.innerText?.trim()) || '';
+              console.log('[PLAYER-NAME]', name);
+              return {
+                name
+              };
+            });
           return { players };
         } catch (err) {
           console.error('[DEBUG-EVAL-START] Error:', err && err.message);
           throw err;
         }
       }, heroName);
-
       return result as any;
     } catch (error) {
       console.error('Error capturing table state:', error);
