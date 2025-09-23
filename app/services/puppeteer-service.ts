@@ -32,6 +32,9 @@ export class PuppeteerService {
       }
       if (!this.page) {
         this.page = await this.browser!.newPage();
+        this.page.on('console', msg => {
+          console.log(`[BROWSER LOG] ${msg.type()}: ${msg.text()}`);
+        });
       }
       // Load session (cookies/localStorage/sessionStorage) if available
       await this.loadSession();
@@ -233,7 +236,7 @@ export class PuppeteerService {
       return false;
     }
   }
-  async getTableState(): Promise<GameState | null> {
+  async getTableState(): Promise<any> {
     const pokerFrame = this.pickPokerFrame();
     // Get hero name from Node environment or config
     const heroName = process.env.HERO_NAME || '';
