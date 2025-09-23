@@ -1,5 +1,6 @@
 import * as puppeteer from 'puppeteer';
 import { promises as fs } from 'fs';
+
 interface GameState {
   players: Array<{
     seat: number;
@@ -21,9 +22,11 @@ interface GameState {
   blinds: number[];
   actionButtons: string[];
 }
+
 export class PuppeteerService {
   private browser: puppeteer.Browser | null = null;
   private page: puppeteer.Page | null = null;
+
   async init(): Promise<boolean> {
     try {
       if (!this.browser) {
@@ -49,6 +52,7 @@ export class PuppeteerService {
       return false;
     }
   }
+
   async launch(): Promise<void> {
     this.browser = await puppeteer.launch({
       headless: false,
@@ -56,11 +60,13 @@ export class PuppeteerService {
     });
     this.page = await this.browser.newPage();
   }
+
   async close(): Promise<void> {
     if (this.browser) {
       await this.browser.close();
     }
   }
+
   async loadSession(): Promise<void> {
     if (!this.page) {
       console.error('Browser page not initialized');
@@ -77,6 +83,7 @@ export class PuppeteerService {
       } catch (error) {
         console.error('Error loading cookies:', error);
       }
+
       try {
         const localStorageData = await fs.readFile('localStorage.json', 'utf8');
         const localStorage = JSON.parse(localStorageData);
@@ -91,6 +98,7 @@ export class PuppeteerService {
       } catch (error) {
         console.error('Error loading localStorage:', error);
       }
+
       try {
         const sessionStorageData = await fs.readFile('sessionStorage.json', 'utf8');
         const sessionStorage = JSON.parse(sessionStorageData);
@@ -109,6 +117,7 @@ export class PuppeteerService {
       console.error('Error loading session:', error);
     }
   }
+
   async saveSession(): Promise<void> {
     if (!this.page) {
       console.error('Browser page not initialized');
@@ -122,6 +131,7 @@ export class PuppeteerService {
       } catch (error) {
         console.error('Error saving cookies:', error);
       }
+
       try {
         const localStorage = await this.page.evaluate(() => {
           const data: { [key: string]: string } = {};
@@ -138,6 +148,7 @@ export class PuppeteerService {
       } catch (error) {
         console.error('Error saving localStorage:', error);
       }
+
       try {
         const sessionStorage = await this.page.evaluate(() => {
           const data: { [key: string]: string } = {};
@@ -158,6 +169,7 @@ export class PuppeteerService {
       console.error('Error saving session:', error);
     }
   }
+
   async navigateToGame(gameId: string): Promise<boolean> {
     if (!gameId) {
       console.error('No gameId provided to navigateToGame');
@@ -178,9 +190,11 @@ export class PuppeteerService {
       return false;
     }
   }
+
   private pickPokerFrame(): puppeteer.Frame | puppeteer.Page {
     return this.page as puppeteer.Page;
   }
+
   async isLoggedIn(): Promise<boolean> {
     if (!this.page) return false;
     try {
@@ -200,16 +214,19 @@ export class PuppeteerService {
       return false;
     }
   }
+
   async getTableState(): Promise<GameState | null> {
     const pokerFrame = this.pickPokerFrame();
     const heroName = 'tzup';
     try {
       return await (pokerFrame as puppeteer.Frame | puppeteer.Page).evaluate((heroNameArg: string) => {
+        console.log('EVAL BROWSER CONTEXT loaded', Object.keys(window));
         const parseValue = (text: string | null | undefined): number => {
           if (!text) return 0;
           const num = parseFloat((text || '').replace(/[^0-9.]/g, ''));
           return isNaN(num) ? 0 : num;
         };
+
         const dealerButtonElement = document.querySelector('.dealer-button-ctn .button');
         let dealerSeat = -1;
         if (dealerButtonElement) {
@@ -221,6 +238,7 @@ export class PuppeteerService {
             if (!Number.isNaN(parsed)) dealerSeat = parsed;
           }
         }
+
         type P = {
           seat: number;
           name: string;
@@ -234,15 +252,18 @@ export class PuppeteerService {
           holeCards: string[];
           status: string;
         };
+
         const players = Array.from(document.querySelectorAll('.table-player'))
           .map((el) => {
             const seat = parseInt(el.getAttribute('data-seat') || '0', 10);
             const name = (el.querySelector('.table-player-name a')?.innerText?.trim()) || (el.querySelector('.table-player-name')?.innerText?.trim()) || '';
             if (!name) return null;
+
             const isSelf = (name || '').trim().toLowerCase() === (heroNameArg || '').trim().toLowerCase();
             const isCurrentTurn = !!el.querySelector('.decision-current');
             const isFolded = el.classList.contains('folded');
             const isAllIn = el.classList.contains('all-in');
+
             let stack = 0;
             const stackEl = el.querySelector('.table-player-stack');
             if (stackEl) {
@@ -254,10 +275,13 @@ export class PuppeteerService {
                 stack = parseValue(chipsValue?.innerText);
               }
             }
+
             const betEl = el.querySelector('.table-player-bet-value .chips-value') as HTMLElement;
             const bet = parseValue(betEl?.innerText);
+
             const statusEl = el.querySelector('.table-player-status-icon') as HTMLElement;
             const status = statusEl?.innerText?.trim() || '';
+
             const holeCards: string[] = [];
             if (isSelf) {
               const cardElements = el.querySelectorAll('.card-container .card');
@@ -273,6 +297,7 @@ export class PuppeteerService {
                 }
               });
             }
+
             return {
               seat,
               name,
@@ -288,6 +313,7 @@ export class PuppeteerService {
             } as P | null;
           })
           .filter((p): p is P => p !== null);
+
         const communityCards: string[] = [];
         const boardCardElements = document.querySelectorAll('.table-cards .card-container .card');
         boardCardElements.forEach((cardEl) => {
@@ -301,11 +327,13 @@ export class PuppeteerService {
             }
           }
         });
+
         let pot = 0;
         const potEl = document.querySelector('.main-value .normal-value') as HTMLElement;
         if (potEl) {
           pot = parseValue(potEl.textContent);
         }
+
         const blinds: number[] = [];
         const blindElements = document.querySelectorAll('.blind-value-ctn .normal-value');
         blindElements.forEach((blindEl) => {
@@ -314,6 +342,7 @@ export class PuppeteerService {
             blinds.push(blindValue);
           }
         });
+
         const actionButtons: string[] = [];
         const buttonElements = document.querySelectorAll('button.action-button');
         buttonElements.forEach((btnEl) => {
@@ -322,12 +351,15 @@ export class PuppeteerService {
             actionButtons.push(buttonText);
           }
         });
+
         let actionTurn = false;
         const suspendedSignal = document.querySelector('.action-signal.suspended');
         const heroDecisionCurrent = document.querySelector('.you-player .decision-current');
         actionTurn = !!(suspendedSignal || heroDecisionCurrent);
+
         const hero = players.find((p) => p.isSelf) || null;
         const heroCards = hero ? hero.holeCards : [];
+
         return {
           players,
           communityCards,
