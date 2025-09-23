@@ -273,6 +273,9 @@ export class PuppeteerService {
           .map((el) => {
             const seat = parseInt(el.getAttribute('data-seat') || '0', 10);
             const name = (el.querySelector('.table-player-name a')?.innerText?.trim()) || (el.querySelector('.table-player-name')?.innerText?.trim()) || '';
+            if (name) {
+              try { console.log('Player found:', name); } catch {}
+            }
             if (!name) return null;
             const isSelf = el.classList.contains('you-player');
             const isCurrentTurn = !!el.querySelector('.decision-current');
@@ -366,6 +369,7 @@ export class PuppeteerService {
         });
         // Use the hero name passed as argument
         const heroNameNormalized = (heroNameArg || '').trim().toLowerCase();
+        try { console.log('Hero name being searched for:', heroNameArg); } catch {}
         // If hero name provided, align isSelf based on heroNameArg (in case .you-player missing)
         if (heroNameNormalized) {
           for (const p of players) {
