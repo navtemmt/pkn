@@ -31,14 +31,17 @@ export class PuppeteerService {
     if (!this.browser) {
       await this.launch();
     }
+
     // Ensure a page exists
     if (!this.page && this.browser) {
       this.page = await this.browser.newPage();
     }
+
     // Try to restore session and check login status (non-fatal if unavailable)
     try {
       await this.loadSession();
     } catch {}
+
     try {
       // Navigate to PokerNow home to allow login detection when possible
       if (this.page) {
@@ -49,6 +52,7 @@ export class PuppeteerService {
         }
       }
     } catch {}
+
     // Soft-check login state; do not throw here to preserve manual login flows
     try {
       const ok = await this.isLoggedIn();
@@ -77,6 +81,7 @@ export class PuppeteerService {
       console.error('Browser page not initialized');
       return;
     }
+
     try {
       // Load cookies
       try {
@@ -89,6 +94,7 @@ export class PuppeteerService {
       } catch (error) {
         console.error('Error loading cookies:', error);
       }
+
       // Load localStorage
       try {
         const localStorageData = await fs.readFile('localStorage.json', 'utf8');
@@ -104,6 +110,7 @@ export class PuppeteerService {
       } catch (error) {
         console.error('Error loading localStorage:', error);
       }
+
       // Load sessionStorage
       try {
         const sessionStorageData = await fs.readFile('sessionStorage.json', 'utf8');
@@ -129,6 +136,7 @@ export class PuppeteerService {
       console.error('Browser page not initialized');
       return;
     }
+
     try {
       // Save cookies
       try {
@@ -138,6 +146,7 @@ export class PuppeteerService {
       } catch (error) {
         console.error('Error saving cookies:', error);
       }
+
       // Save localStorage
       try {
         const localStorage = await this.page.evaluate(() => {
@@ -155,6 +164,7 @@ export class PuppeteerService {
       } catch (error) {
         console.error('Error saving localStorage:', error);
       }
+
       // Save sessionStorage
       try {
         const sessionStorage = await this.page.evaluate(() => {
@@ -182,14 +192,17 @@ export class PuppeteerService {
       console.error('No gameId provided to navigateToGame');
       return false;
     }
+
     try {
       if (!this.page) {
         throw new Error('Browser page not initialized');
       }
+
       await this.page.goto(`https://www.pokernow.club/games/${gameId}`, {
         waitUntil: 'load',
         timeout: 60000,
       });
+
       await this.page.setViewport({ width: 1280, height: 800 });
       return true;
     } catch (err) {
@@ -206,6 +219,7 @@ export class PuppeteerService {
   // Added: login state detection helper
   async isLoggedIn(): Promise<boolean> {
     if (!this.page) return false;
+
     try {
       const hasSignOut = await this.page.evaluate(() => {
         const selectors = [
@@ -228,6 +242,7 @@ export class PuppeteerService {
     const pokerFrame = this.pickPokerFrame();
     // Get hero name from Node environment or config
     const heroName = process.env.HERO_NAME || '';
+
     try {
       const result = await (pokerFrame as puppeteer.Frame | puppeteer.Page).evaluate((heroNameArg: string) => {
         try {
@@ -247,6 +262,7 @@ export class PuppeteerService {
           throw err;
         }
       }, heroName);
+      console.log('Node: Extracted players:', (result.players || []).map(p => p.name));
       return result as any;
     } catch (error) {
       console.error('Error capturing table state:', error);
