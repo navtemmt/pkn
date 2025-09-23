@@ -177,10 +177,10 @@ export class PuppeteerService {
     }
   }
 
-  async navigateToGame(gameId: string): Promise<boolean> {
+  async navigateToGame(gameId: string): Promise<{ code: string }> {
     if (!gameId) {
       console.error('No gameId provided to navigateToGame');
-      return false;
+      return { code: 'error' };
     }
     try {
       if (!this.page) {
@@ -191,10 +191,10 @@ export class PuppeteerService {
         timeout: 60000,
       });
       await this.page.setViewport({ width: 1280, height: 800 });
-      return true;
+      return { code: 'success' };
     } catch (err) {
       console.error('Failed to open game:', err);
-      return false;
+      return { code: 'error' };
     }
   }
 
@@ -228,33 +228,130 @@ export class PuppeteerService {
     const pokerFrame = this.pickPokerFrame();
     // Get hero name from Node environment or config
     const heroName = process.env.HERO_NAME || '';
-
+    
     try {
       const result = await (pokerFrame as puppeteer.Frame | puppeteer.Page).evaluate((heroNameArg: string) => {
         try {
           console.log('[HERO-NAME-ARG]', heroNameArg);
+          
+          // Check for action signal to detect if it's hero's turn
+          const actionSignal = document.querySelector('p.action-signal');
+          const isHeroTurn = actionSignal && actionSignal.textContent && 
+            actionSignal.textContent.trim().toUpperCase() === 'YOUR TURN';
+          
+          console.log('[ACTION-SIGNAL]', actionSignal ? actionSignal.textContent : 'not found');
+          console.log('[IS-HERO-TURN]', isHeroTurn);
+          
           const players = Array.from(document.querySelectorAll('.table-player'))
-            .map(el => {
-              const name = (el.querySelector('.table-player-name a')?.innerText?.trim()) ||
-                          (el.querySelector('.table-player-name')?.innerText?.trim()) || '';
-              console.log('[PLAYER-NAME]', name);
-              return {
+            .map((el, index) => {
+              const nameElement = el.querySelector('.table-player-name a') || 
+                                el.querySelector('.table-player-name');
+              const name = nameElement?.textContent?.trim() || '';
+              
+              const stackElement = el.querySelector('.table-player-stack');
+              const stackText = stackElement?.textContent?.trim() || '0';
+              const stack = parseFloat(stackText.replace(/[^\d.-]/g, '')) || 0;
+              
+              const betElement = el.querySelector('.table-player-bet');
+              const betText = betElement?.textContent?.trim() || '0';
+              const bet = parseFloat(betText.replace(/[^\d.-]/g, '')) || 0;
+              
+              const isSelf = name === heroNameArg;
+              const isDealer = !!el.querySelector('.dealer-button');
+              const isFolded = el.classList.contains('folded') || 
+                             !!el.querySelector('.folded');
+              const isAllIn = el.classList.contains('all-in') || 
+                            !!el.querySelector('.all-in');
+              
+              // Only set isCurrentTurn for hero if action signal is present
+              const isCurrentTurn = isSelf && isHeroTurn;
+              
+              console.log(`[PLAYER-${index}]`, {
                 name,
-                isSelf: name === heroNameArg
+                isSelf,
+                isCurrentTurn,
+                stack,
+                bet,
+                isDealer,
+                isFolded,
+                isAllIn
+              });
+              
+              return {
+                seat: index + 1,
+                name,
+                stack,
+                bet,
+                isSelf,
+                isDealer,
+                isCurrentTurn,
+                isFolded,
+                isAllIn,
+                holeCards: isSelf ? this.extractHoleCards() : [],
+                status: isFolded ? 'folded' : (isAllIn ? 'all-in' : 'active')
               };
             });
-          console.log('[PLAYERS-ARRAY]', players);
-          return { players };
+          
+          const communityCards = this.extractCommunityCards();
+          const pot = this.extractPot();
+          
+          console.log('[EXTRACTED-STATE]', {
+            playersCount: players.length,
+            heroFound: players.some(p => p.isSelf),
+            heroTurn: players.find(p => p.isSelf)?.isCurrentTurn,
+            communityCardsCount: communityCards.length,
+            pot
+          });
+          
+          return {
+            players,
+            communityCards,
+            pot,
+            actionTurn: isHeroTurn,
+            heroCards: players.find(p => p.isSelf)?.holeCards || [],
+            blinds: [0.5, 1], // Default blinds, should be extracted from UI
+            actionButtons: this.extractActionButtons()
+          };
         } catch (err) {
           console.error('[DEBUG-EVAL-START] Error:', err && err.message);
           throw err;
         }
       }, heroName);
-      console.log('Node: Extracted players:', (result.players || []).map(p => p.name));
-      return result as any;
+      
+      console.log('Node: Extracted players:', (result.players || []).map(p => 
+        `${p.name}${p.isSelf ? ' (HERO)' : ''}${p.isCurrentTurn ? ' (TURN)' : ''}`
+      ));
+      
+      return result as GameState;
     } catch (error) {
       console.error('Error capturing table state:', error);
       return null;
     }
+  }
+
+  // Helper methods for extracting game state (to be implemented based on actual DOM structure)
+  private extractHoleCards(): string[] {
+    // This would be implemented based on the actual DOM structure
+    const cards = document.querySelectorAll('.hero-cards .card');
+    return Array.from(cards).map(card => card.textContent?.trim() || '');
+  }
+
+  private extractCommunityCards(): string[] {
+    // This would be implemented based on the actual DOM structure
+    const cards = document.querySelectorAll('.community-cards .card');
+    return Array.from(cards).map(card => card.textContent?.trim() || '');
+  }
+
+  private extractPot(): number {
+    // This would be implemented based on the actual DOM structure
+    const potElement = document.querySelector('.pot-amount');
+    const potText = potElement?.textContent?.trim() || '0';
+    return parseFloat(potText.replace(/[^\d.-]/g, '')) || 0;
+  }
+
+  private extractActionButtons(): string[] {
+    // This would be implemented based on the actual DOM structure
+    const buttons = document.querySelectorAll('.action-buttons button:not(:disabled)');
+    return Array.from(buttons).map(btn => btn.textContent?.trim() || '');
   }
 }
