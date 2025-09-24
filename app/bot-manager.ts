@@ -26,10 +26,13 @@ const bot_manager = async function() {
     const puppeteer_service = new PuppeteerService(webdriver_config.default_timeout, webdriver_config.headless_flag);
     await puppeteer_service.init();
     
-    // After your Puppeteer page creation and navigation, add:
-    const heroUserName = await page.$eval('.username a', e => e.textContent.trim());
-    console.log('Hero user name:', heroUserName);
-    // Place this code in a logical spot (e.g., after page.goto, before browser close)
+    // Get hero user name using the puppeteer service
+    const heroUserNameResult = await puppeteer_service.getHeroUserName();
+    if (heroUserNameResult.code === 'success') {
+        console.log('Hero user name:', heroUserNameResult.data);
+    } else {
+        console.log('Could not retrieve hero user name');
+    }
     
     const db_service = new DBService("./app/pokernow-gpt.db");
     await db_service.init();
